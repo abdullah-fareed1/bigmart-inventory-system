@@ -1,5 +1,4 @@
 // Location: actions/auth.ts
-export const runtime = "nodejs";
 "use server";
 
 import { signIn, signOut } from "@/lib/auth";
@@ -41,7 +40,7 @@ export async function signInAction(formData: FormData) {
   if (!validatedFields.success) {
     return {
       success: false,
-      error: validatedFields.error.errors[0].message,
+      error: validatedFields.error.message,
     };
   }
 
@@ -83,12 +82,14 @@ export async function changePasswordAction(formData: {
   newPassword: string;
   confirmPassword: string;
 }) {
+  "use server";
+
   const validatedFields = changePasswordSchema.safeParse(formData);
 
   if (!validatedFields.success) {
     return {
       success: false,
-      error: validatedFields.error.errors[0].message,
+      error: validatedFields.error.message,
     };
   }
 

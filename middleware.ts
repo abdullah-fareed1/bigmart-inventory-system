@@ -1,5 +1,7 @@
 // Location: middleware.ts (project root)
 
+export const runtime = "nodejs";
+
 export { auth as middleware } from "./auth";
 
 export const config = {

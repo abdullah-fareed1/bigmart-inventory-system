@@ -50,10 +50,10 @@ export default function LoginPage() {
             <Scissors className="h-6 w-6 text-zinc-50 dark:text-zinc-950" />
           </div>
           <h1 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50">
-            Textile POS
+            Big Mart Textiles
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
-            Point of Sale System
+            Inventory Management & Point of Sale System
           </p>
         </div>
 
@@ -83,7 +83,7 @@ export default function LoginPage() {
                   id="email"
                   name="email"
                   type="email"
-                  placeholder="admin@textilepos.com"
+                  placeholder="admin@bigmart.lk"
                   required
                   autoComplete="email"
                   autoFocus
