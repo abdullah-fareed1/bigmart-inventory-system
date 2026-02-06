@@ -1,4 +1,4 @@
-// Location: auth.ts (project root)
+
 export const runtime = "nodejs";
 
 import NextAuth from "next-auth";
@@ -9,7 +9,7 @@ import { prisma } from "@/lib/prisma";
 export const { handlers, signIn, signOut, auth } = NextAuth({
   session: {
     strategy: "jwt",
-    maxAge: 30 * 24 * 60 * 60, // 30 days
+    maxAge: 8 * 60 * 60, // 8 hours
   },
   pages: {
     signIn: "/login",
