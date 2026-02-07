@@ -14,7 +14,7 @@ import {
   getSalesChartData,
   getTopProducts,
   getLowStockItems,
-} from "@/app/actions/dashboard";
+} from "@/actions/dashboard";
 import { formatCurrency } from "@/lib/format";
 
 export default async function DashboardPage() {
