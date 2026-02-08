@@ -13,8 +13,12 @@ const createStockSchema = z.object({
   supplierId: z.string().min(1, "Supplier is required"),
   quantity: z.number().positive("Quantity must be greater than 0"),
   measuringUnit: z.string().min(1, "Measuring unit is required"),
-  buyingPricePerUnit: z.number().positive("Buying price must be greater than 0"),
-  sellingPricePerUnit: z.number().positive("Selling price must be greater than 0"),
+  buyingPricePerUnit: z
+    .number()
+    .positive("Buying price must be greater than 0"),
+  sellingPricePerUnit: z
+    .number()
+    .positive("Selling price must be greater than 0"),
   paymentStatus: z.enum(["PAID", "UNPAID", "PARTIAL"]),
   amountPaid: z.number().min(0).optional(),
   notes: z.string().optional(),
@@ -36,6 +40,43 @@ const returnStockSchema = z.object({
   notes: z.string().optional(),
 });
 
+// ─── Serialization Helper ────────────────────────────────────────
+// Prisma returns Decimal objects for @db.Decimal fields.
+// Next.js cannot serialize Decimal across Server→Client boundary.
+// These helpers convert Decimal fields to plain numbers.
+// Using `any` here because Prisma model types include Decimal
+// which we're intentionally converting — strict typing happens
+// at the function return level via the exported types.
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+function serializeStock<T extends Record<string, any>>(stock: T) {
+  return {
+    ...stock,
+    quantityAdded: Number(stock.quantityAdded),
+    quantityRemaining: Number(stock.quantityRemaining),
+    buyingPricePerUnit: Number(stock.buyingPricePerUnit),
+    sellingPricePerUnit: Number(stock.sellingPricePerUnit),
+    amountPaid: Number(stock.amountPaid),
+    totalCost: Number(stock.totalCost),
+  };
+}
+
+function serializePayment<T extends Record<string, any>>(payment: T) {
+  return {
+    ...payment,
+    amountPaid: Number(payment.amountPaid),
+  };
+}
+
+function serializeReturn<T extends Record<string, any>>(ret: T) {
+  return {
+    ...ret,
+    quantityReturned: Number(ret.quantityReturned),
+    refundAmount: Number(ret.refundAmount),
+  };
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+
 // ─── Types ───────────────────────────────────────────────────────
 
 export type StockWithRelations = Awaited<
@@ -50,6 +91,7 @@ export type StockDetail = NonNullable<
 
 /**
  * Fetch stocks with filters and pagination.
+ * Serializes Decimal → number for client components.
  */
 export async function getStocks(params?: {
   search?: string;
@@ -99,7 +141,7 @@ export async function getStocks(params?: {
     ];
   }
 
-  const [stocks, total] = await Promise.all([
+  const [rawStocks, total] = await Promise.all([
     prisma.stock.findMany({
       where,
       include: {
@@ -113,6 +155,9 @@ export async function getStocks(params?: {
     prisma.stock.count({ where }),
   ]);
 
+  // Serialize Decimal fields to plain numbers
+  const stocks = rawStocks.map((s) => serializeStock(s));
+
   return {
     stocks,
     total,
@@ -123,10 +168,11 @@ export async function getStocks(params?: {
 }
 
 /**
- * Fetch a single stock entry with full details including payment history and returns.
+ * Fetch a single stock entry with full details.
+ * Serializes Decimal → number for client components.
  */
 export async function getStockById(id: string) {
-  const stock = await prisma.stock.findUnique({
+  const rawStock = await prisma.stock.findUnique({
     where: { id },
     include: {
       product: {
@@ -144,24 +190,22 @@ export async function getStockById(id: string) {
     },
   });
 
-  if (!stock) {
+  if (!rawStock) {
     return { stock: null, error: "Stock not found" };
   }
+
+  // Serialize all Decimal fields
+  const stock = {
+    ...serializeStock(rawStock),
+    payments: rawStock.payments.map((p) => serializePayment(p)),
+    supplierReturns: rawStock.supplierReturns.map((r) => serializeReturn(r)),
+  };
 
   return { stock };
 }
 
 /**
  * Create a new stock entry with GRN number.
- * Uses a Prisma transaction for atomicity.
- *
- * Business logic:
- * - totalCost = quantity × buyingPricePerUnit
- * - PAID → amountPaid = totalCost (auto)
- * - UNPAID → amountPaid = 0 (auto)
- * - PARTIAL → amountPaid must be provided and < totalCost
- * - sellingPrice must be > buyingPrice
- * - Creates initial payment record if PAID or PARTIAL
  */
 export async function createStock(data: z.infer<typeof createStockSchema>) {
   const parsed = createStockSchema.safeParse(data);
@@ -207,19 +251,17 @@ export async function createStock(data: z.infer<typeof createStockSchema>) {
     }
     if (input.amountPaid >= totalCost) {
       return {
-        error: "Partial payment amount must be less than total cost. Use PAID status instead.",
+        error:
+          "Partial payment amount must be less than total cost. Use PAID status instead.",
       };
     }
     amountPaid = input.amountPaid;
   }
-  // UNPAID → amountPaid stays 0
 
   // Transaction: generate GRN + create stock + optional payment record
   const result = await prisma.$transaction(async (tx) => {
-    // Get next GRN number
     const grnNumber = await getNextNumber("grn");
 
-    // Create stock entry
     const stock = await tx.stock.create({
       data: {
         grnNumber,
@@ -241,14 +283,13 @@ export async function createStock(data: z.infer<typeof createStockSchema>) {
       },
     });
 
-    // Create initial payment record if PAID or PARTIAL
     if (input.paymentStatus === "PAID" || input.paymentStatus === "PARTIAL") {
       await tx.stockSupplierPayment.create({
         data: {
           stockId: stock.id,
           supplierId: input.supplierId,
           amountPaid,
-          paymentMethod: "CASH", // Default for initial payment
+          paymentMethod: "CASH",
           notes: "Initial payment on stock creation",
         },
       });
@@ -259,12 +300,13 @@ export async function createStock(data: z.infer<typeof createStockSchema>) {
 
   revalidatePath("/stocks");
   revalidatePath("/dashboard");
-  return { stock: result };
+
+  // Serialize the result before returning
+  return { stock: serializeStock(result) };
 }
 
 /**
  * Record a payment for an existing stock entry.
- * Updates payment status to PAID if fully paid, else PARTIAL.
  */
 export async function recordStockPayment(
   data: z.infer<typeof recordPaymentSchema>
@@ -276,7 +318,6 @@ export async function recordStockPayment(
 
   const input = parsed.data;
 
-  // Get current stock
   const stock = await prisma.stock.findUnique({
     where: { id: input.stockId },
   });
@@ -288,7 +329,6 @@ export async function recordStockPayment(
     return { error: "This stock is already fully paid" };
   }
 
-  // Calculate new total paid
   const currentPaid = Number(stock.amountPaid);
   const newTotalPaid = parseFloat((currentPaid + input.amountPaid).toFixed(2));
   const totalCost = Number(stock.totalCost);
@@ -300,12 +340,9 @@ export async function recordStockPayment(
     };
   }
 
-  // Determine new status
   const newStatus = newTotalPaid >= totalCost ? "PAID" : "PARTIAL";
 
-  // Transaction: create payment + update stock
   const result = await prisma.$transaction(async (tx) => {
-    // Create payment record
     await tx.stockSupplierPayment.create({
       data: {
         stockId: input.stockId,
@@ -316,7 +353,6 @@ export async function recordStockPayment(
       },
     });
 
-    // Update stock payment info
     const updatedStock = await tx.stock.update({
       where: { id: input.stockId },
       data: {
@@ -335,13 +371,17 @@ export async function recordStockPayment(
 
   revalidatePath(`/stocks/${input.stockId}`);
   revalidatePath("/stocks");
-  return { stock: result };
+
+  return {
+    stock: {
+      ...serializeStock(result),
+      payments: result.payments.map((p) => serializePayment(p)),
+    },
+  };
 }
 
 /**
  * Return stock to supplier.
- * Creates a SupplierReturn record and decrements quantityRemaining.
- * If quantityRemaining reaches 0, marks stock as inactive.
  */
 export async function returnStockToSupplier(
   data: z.infer<typeof returnStockSchema>
@@ -353,7 +393,6 @@ export async function returnStockToSupplier(
 
   const input = parsed.data;
 
-  // Get stock details
   const stock = await prisma.stock.findUnique({
     where: { id: input.stockId },
     include: {
@@ -373,16 +412,13 @@ export async function returnStockToSupplier(
     };
   }
 
-  // Transaction: create return + update stock
   const result = await prisma.$transaction(async (tx) => {
-    // Get next return number
     const returnNumber = await getNextNumber("grn_return");
 
     const newRemaining = parseFloat(
       (remaining - input.quantityReturned).toFixed(2)
     );
 
-    // Create return record
     const supplierReturn = await tx.supplierReturn.create({
       data: {
         returnNumber,
@@ -397,7 +433,6 @@ export async function returnStockToSupplier(
       },
     });
 
-    // Update stock
     await tx.stock.update({
       where: { id: input.stockId },
       data: {
@@ -412,5 +447,6 @@ export async function returnStockToSupplier(
   revalidatePath(`/stocks/${input.stockId}`);
   revalidatePath("/stocks");
   revalidatePath("/dashboard");
-  return { supplierReturn: result };
+
+  return { supplierReturn: serializeReturn(result) };
 }

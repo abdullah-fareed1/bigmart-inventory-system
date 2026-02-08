@@ -32,7 +32,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Search, Package, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
-import { getStocks, createStock, type StockWithRelations } from "@/actions/stocks";
+import {
+  getStocks,
+  createStock,
+  type StockWithRelations,
+} from "@/actions/stocks";
 import { getProducts } from "@/actions/products";
 import { getSuppliers } from "@/actions/suppliers";
 import { StockForm, type StockFormData } from "@/components/forms/stock-form";
@@ -111,10 +115,33 @@ export default function StocksPage() {
         getProducts({ isActive: true }),
         getSuppliers({ isActive: true }),
       ]);
-      setProducts(
-        (productsResult as { products: { id: string; name: string; primaryUnit: string }[] }).products || []
+
+      // getProducts returns { success, data: { products: [...] } }
+      // Extract correctly based on actual response shape
+      if (productsResult.success && productsResult.data) {
+        setProducts(
+          productsResult.data.products.map(
+            (p: { id: string; name: string; primaryUnit: string }) => ({
+              id: p.id,
+              name: p.name,
+              primaryUnit: p.primaryUnit,
+            })
+          )
+        );
+      } else {
+        setProducts([]);
+      }
+
+      // getSuppliers returns { suppliers: [...] }
+      setSuppliers(
+        (suppliersResult.suppliers || []).map(
+          (s: { id: string; name: string; phoneNumber: string }) => ({
+            id: s.id,
+            name: s.name,
+            phoneNumber: s.phoneNumber,
+          })
+        )
       );
-      setSuppliers(suppliersResult.suppliers || []);
     } catch {
       toast.error("Failed to load form data");
     }
@@ -182,7 +209,7 @@ export default function StocksPage() {
             setPage(1);
           }}
         >
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="w-[150px]">
             <SelectValue placeholder="Payment Status" />
           </SelectTrigger>
           <SelectContent>
@@ -204,14 +231,15 @@ export default function StocksPage() {
           <AlertTriangle className="mr-2 h-4 w-4" />
           Low Stock
         </Button>
-
-        <span className="text-sm text-muted-foreground ml-auto">
-          {total} {total === 1 ? "entry" : "entries"} found
-        </span>
       </div>
 
-      {/* Stocks Table */}
-      <div className="rounded-md border">
+      {/* Stats bar */}
+      <div className="text-sm text-muted-foreground">
+        {total} stock {total === 1 ? "entry" : "entries"} found
+      </div>
+
+      {/* Table */}
+      <div className="border rounded-lg">
         <Table>
           <TableHeader>
             <TableRow>
@@ -238,14 +266,9 @@ export default function StocksPage() {
               ))
             ) : stocks.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-12">
-                  <Package className="mx-auto h-12 w-12 text-muted-foreground mb-3" />
+                <TableCell colSpan={8} className="text-center py-8">
+                  <Package className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
                   <p className="text-muted-foreground">No stocks found</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {search || paymentStatus || showLowStock
-                      ? "Try adjusting your filters"
-                      : "Add your first stock entry to get started"}
-                  </p>
                 </TableCell>
               </TableRow>
             ) : (
@@ -260,16 +283,25 @@ export default function StocksPage() {
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => router.push(`/stocks/${stock.id}`)}
                   >
-                    <TableCell className="font-mono font-medium">
+                    <TableCell className="font-mono text-sm">
                       {stock.grnNumber}
                     </TableCell>
                     <TableCell>
-                      <div>
-                        <span className={isOut ? "line-through text-muted-foreground" : ""}>
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={
+                            isOut
+                              ? "line-through text-muted-foreground"
+                              : ""
+                          }
+                        >
                           {stock.product.name}
                         </span>
                         {isOut && (
-                          <Badge variant="destructive" className="ml-2 text-xs">
+                          <Badge
+                            variant="destructive"
+                            className="ml-2 text-xs"
+                          >
                             OUT OF STOCK
                           </Badge>
                         )}
@@ -277,7 +309,11 @@ export default function StocksPage() {
                     </TableCell>
                     <TableCell>{stock.supplier.name}</TableCell>
                     <TableCell className="text-right">
-                      <span className={isLow ? "text-amber-600 font-medium" : ""}>
+                      <span
+                        className={
+                          isLow ? "text-amber-600 font-medium" : ""
+                        }
+                      >
                         {formatQuantity(remaining)} {stock.measuringUnit}
                       </span>
                     </TableCell>
@@ -334,7 +370,8 @@ export default function StocksPage() {
           <DialogHeader>
             <DialogTitle>Add New Stock</DialogTitle>
             <DialogDescription>
-              Add a new stock entry. A GRN number will be automatically generated.
+              Add a new stock entry. A GRN number will be automatically
+              generated.
             </DialogDescription>
           </DialogHeader>
           <StockForm

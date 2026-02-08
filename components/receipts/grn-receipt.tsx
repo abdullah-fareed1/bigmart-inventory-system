@@ -36,7 +36,10 @@ export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
   const balance = totalCost - amountPaid;
 
   return (
-    <div className="grn-receipt" style={{ fontFamily: "monospace", width: "302px", padding: "8px" }}>
+    <div
+      className="grn-receipt"
+      style={{ fontFamily: "monospace", width: "302px", padding: "8px" }}
+    >
       <style>
         {`
           @media print {
@@ -94,7 +97,7 @@ export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
 
       <div className="divider" />
 
-      {/* Stock Details */}
+      {/* Stock Details — NO selling price (internal info) */}
       <div className="row">
         <span>Quantity:</span>
         <span>
@@ -102,12 +105,8 @@ export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
         </span>
       </div>
       <div className="row">
-        <span>Buying Price/Unit:</span>
+        <span>Unit Price:</span>
         <span>{formatCurrency(stock.buyingPricePerUnit)}</span>
-      </div>
-      <div className="row">
-        <span>Selling Price/Unit:</span>
-        <span>{formatCurrency(stock.sellingPricePerUnit)}</span>
       </div>
 
       <div className="double-divider" />
@@ -207,8 +206,7 @@ export function printGRN(
   <div>${stock.product.name}</div>
   <div class="divider"></div>
   <div class="row"><span>Quantity:</span><span>${formatQuantity(stock.quantityAdded)} ${stock.measuringUnit}</span></div>
-  <div class="row"><span>Buying Price/Unit:</span><span>${formatCurrency(stock.buyingPricePerUnit)}</span></div>
-  <div class="row"><span>Selling Price/Unit:</span><span>${formatCurrency(stock.sellingPricePerUnit)}</span></div>
+  <div class="row"><span>Unit Price:</span><span>${formatCurrency(stock.buyingPricePerUnit)}</span></div>
   <div class="double-divider"></div>
   <div class="row bold"><span>Total Cost:</span><span>${formatCurrency(totalCost)}</span></div>
   <div class="row"><span>Amount Paid:</span><span>${formatCurrency(amountPaid)}</span></div>
@@ -216,13 +214,12 @@ export function printGRN(
   <div class="row"><span>Payment Status:</span><span class="bold">${stock.paymentStatus}</span></div>
   <div class="double-divider"></div>
   ${stock.notes ? `<div class="bold">Notes:</div><div>${stock.notes}</div><div class="divider"></div>` : ""}
-  <div class="center" style="margin-top:8px">
+  <div class="center" style="margin-top: 8px;">
     <div>Received By: _______________</div>
-    <div style="margin-top:16px">Signature: _______________</div>
+    <div style="margin-top: 16px;">Signature: _______________</div>
   </div>
-  <div class="divider" style="margin-top:12px"></div>
-  <div class="center" style="font-size:10px">Generated on ${formatDateTime(new Date())}</div>
-  <script>window.onload = function() { window.print(); }</script>
+  <div class="divider" style="margin-top: 12px;"></div>
+  <div class="center" style="font-size: 10px;">Generated on ${formatDateTime(new Date())}</div>
 </body>
 </html>`;
 
@@ -230,5 +227,8 @@ export function printGRN(
   if (printWindow) {
     printWindow.document.write(html);
     printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.print();
+    };
   }
 }
