@@ -16,7 +16,6 @@ const createSupplierSchema = z.object({
 });
 
 const updateSupplierSchema = z.object({
-  id: z.string().min(1),
   name: z.string().min(2, "Name must be at least 2 characters").optional(),
   phoneNumber: z
     .string()
@@ -75,6 +74,7 @@ export async function getSuppliers(params?: {
 
 /**
  * Get a single supplier by ID with stock summary stats.
+ * Serializes Decimal fields to avoid client component errors.
  */
 export async function getSupplierById(id: string) {
   const supplier = await prisma.supplier.findUnique({
@@ -97,7 +97,7 @@ export async function getSupplierById(id: string) {
     return { error: "Supplier not found" };
   }
 
-  // Calculate summary stats
+  // Calculate summary stats (convert Decimals to numbers)
   const totalStocks = supplier.stocks.length;
   const activeStocks = supplier.stocks.filter((s) => s.isActive).length;
   const totalValue = supplier.stocks.reduce(
@@ -108,18 +108,28 @@ export async function getSupplierById(id: string) {
     (sum, s) => sum + Number(s.amountPaid),
     0
   );
-  const unpaidBalance = totalValue - totalPaid;
+  const unpaidBalance = parseFloat((totalValue - totalPaid).toFixed(2));
+
+  // Return supplier without raw stock Decimals — only the stats
+  const { stocks: _stocks, ...supplierData } = supplier;
 
   return {
-    supplier,
-    stats: { totalStocks, activeStocks, totalValue, unpaidBalance },
+    supplier: supplierData,
+    stats: {
+      totalStocks,
+      activeStocks,
+      totalValue: parseFloat(totalValue.toFixed(2)),
+      unpaidBalance,
+    },
   };
 }
 
 /**
  * Create a new supplier.
  */
-export async function createSupplier(data: z.infer<typeof createSupplierSchema>) {
+export async function createSupplier(
+  data: z.infer<typeof createSupplierSchema>
+) {
   const parsed = createSupplierSchema.safeParse(data);
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message };
@@ -131,7 +141,10 @@ export async function createSupplier(data: z.infer<typeof createSupplierSchema>)
   });
   if (existing) {
     if (existing.deletedAt) {
-      return { error: "A deleted supplier with this phone number exists. Contact support." };
+      return {
+        error:
+          "A deleted supplier with this phone number exists. Contact support.",
+      };
     }
     return { error: "A supplier with this phone number already exists" };
   }
@@ -144,6 +157,7 @@ export async function createSupplier(data: z.infer<typeof createSupplierSchema>)
     },
   });
 
+  revalidatePath("/suppliers");
   revalidatePath("/settings");
   revalidatePath("/stocks");
   return { supplier };
@@ -151,14 +165,18 @@ export async function createSupplier(data: z.infer<typeof createSupplierSchema>)
 
 /**
  * Update an existing supplier.
+ * Accepts two args: (id, data) to match how the UI calls it.
  */
-export async function updateSupplier(data: z.infer<typeof updateSupplierSchema>) {
+export async function updateSupplier(
+  id: string,
+  data: z.infer<typeof updateSupplierSchema>
+) {
   const parsed = updateSupplierSchema.safeParse(data);
   if (!parsed.success) {
     return { error: parsed.error.issues[0].message };
   }
 
-  const { id, ...updateData } = parsed.data;
+  const updateData = parsed.data;
 
   // Verify supplier exists
   const existing = await prisma.supplier.findUnique({ where: { id } });
@@ -167,7 +185,10 @@ export async function updateSupplier(data: z.infer<typeof updateSupplierSchema>)
   }
 
   // If phone changed, check uniqueness
-  if (updateData.phoneNumber && updateData.phoneNumber !== existing.phoneNumber) {
+  if (
+    updateData.phoneNumber &&
+    updateData.phoneNumber !== existing.phoneNumber
+  ) {
     const phoneExists = await prisma.supplier.findUnique({
       where: { phoneNumber: updateData.phoneNumber },
     });
@@ -176,25 +197,29 @@ export async function updateSupplier(data: z.infer<typeof updateSupplierSchema>)
     }
   }
 
-  // Build clean update object (remove undefined values)
+  // Build clean update object
   const cleanUpdate: Record<string, unknown> = {};
   if (updateData.name !== undefined) cleanUpdate.name = updateData.name;
-  if (updateData.phoneNumber !== undefined) cleanUpdate.phoneNumber = updateData.phoneNumber;
+  if (updateData.phoneNumber !== undefined)
+    cleanUpdate.phoneNumber = updateData.phoneNumber;
   if (updateData.notes !== undefined) cleanUpdate.notes = updateData.notes;
-  if (updateData.isActive !== undefined) cleanUpdate.isActive = updateData.isActive;
+  if (updateData.isActive !== undefined)
+    cleanUpdate.isActive = updateData.isActive;
 
   const supplier = await prisma.supplier.update({
     where: { id },
     data: cleanUpdate,
   });
 
+  revalidatePath("/suppliers");
+  revalidatePath(`/suppliers/${id}`);
   revalidatePath("/settings");
   revalidatePath("/stocks");
   return { supplier };
 }
 
 /**
- * Soft delete a supplier (set deletedAt and isActive=false).
+ * Soft delete a supplier.
  * Only allowed if supplier has no active stocks.
  */
 export async function deleteSupplier(id: string) {
@@ -216,7 +241,9 @@ export async function deleteSupplier(id: string) {
   }
 
   if (supplier.stocks.length > 0) {
-    return { error: "Cannot delete supplier with active stock entries" };
+    return {
+      error: `Cannot delete supplier with ${supplier.stocks.length} active stock(s). Return or deplete stock first.`,
+    };
   }
 
   await prisma.supplier.update({
@@ -227,6 +254,7 @@ export async function deleteSupplier(id: string) {
     },
   });
 
+  revalidatePath("/suppliers");
   revalidatePath("/settings");
   revalidatePath("/stocks");
   return { success: true };

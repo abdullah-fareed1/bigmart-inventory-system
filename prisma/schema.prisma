@@ -75,6 +75,7 @@ model Supplier {
   stocks          Stock[]
   payments        StockSupplierPayment[]
   supplierReturns SupplierReturn[]
+  creditNotes     SupplierCreditNote[]
 
   @@index([phoneNumber])
   @@index([name])
@@ -154,6 +155,7 @@ model Stock {
   payments         StockSupplierPayment[]
   supplierReturns  SupplierReturn[]
   transactionItems TransactionItem[]
+  creditNoteUsages CreditNoteUsage[]
 
   @@index([productId])
   @@index([supplierId])
@@ -195,14 +197,61 @@ model SupplierReturn {
   reason           String
   returnDate       DateTime @default(now())
   refundAmount     Decimal  @db.Decimal(10, 2)
-  refundMethod     String
+  refundMethod     String   // DEBT_OFFSET / CASH / BANK_TRANSFER / CREDIT_NOTE
   notes            String?  @db.Text
   createdAt        DateTime @default(now())
+
+  creditNote SupplierCreditNote?
 
   @@index([stockId])
   @@index([supplierId])
   @@index([returnDate])
 }
+
+// ==========================================
+// CREDIT NOTE SYSTEM (Phase 4B)
+// ==========================================
+
+model SupplierCreditNote {
+  id               String   @id @default(cuid())
+  creditNoteNumber String   @unique
+
+  supplierId       String
+  supplier         Supplier       @relation(fields: [supplierId], references: [id])
+  supplierReturnId String         @unique
+  supplierReturn   SupplierReturn @relation(fields: [supplierReturnId], references: [id])
+
+  originalAmount  Decimal @db.Decimal(10, 2)
+  remainingAmount Decimal @db.Decimal(10, 2)
+  isFullyUsed     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  usages CreditNoteUsage[]
+
+  @@index([supplierId])
+  @@index([isFullyUsed])
+  @@index([supplierId, isFullyUsed])
+}
+
+model CreditNoteUsage {
+  id           String             @id @default(cuid())
+  creditNoteId String
+  creditNote   SupplierCreditNote @relation(fields: [creditNoteId], references: [id])
+  stockId      String
+  stock        Stock              @relation(fields: [stockId], references: [id])
+
+  amountUsed Decimal  @db.Decimal(10, 2)
+  usedAt     DateTime @default(now())
+
+  @@index([creditNoteId])
+  @@index([stockId])
+}
+
+// ==========================================
+// SALES SYSTEM
+// ==========================================
 
 model Transaction {
   id            String    @id @default(cuid())

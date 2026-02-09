@@ -1,3 +1,4 @@
+// src/components/layout/sidebar.tsx
 "use client";
 
 import { useState } from "react";
@@ -9,6 +10,7 @@ import {
   ShoppingCart,
   Package,
   Warehouse,
+  Truck,
   Users,
   Receipt,
   Settings,
@@ -32,6 +34,7 @@ const navItems = [
   { icon: ShoppingCart, label: "Point of Sale", href: "/pos" },
   { icon: Package, label: "Products", href: "/products" },
   { icon: Warehouse, label: "Stocks", href: "/stocks" },
+  { icon: Truck, label: "Suppliers", href: "/suppliers" },
   { icon: Users, label: "Customers", href: "/customers" },
   { icon: Receipt, label: "Transactions", href: "/transactions" },
   { icon: Settings, label: "Settings", href: "/settings" },
@@ -87,29 +90,27 @@ export function Sidebar() {
                       className={cn(
                         "flex h-10 w-10 items-center justify-center rounded-md mx-auto transition-colors",
                         isActive
-                          ? "bg-accent font-semibold text-accent-foreground"
+                          ? "bg-accent text-accent-foreground font-bold"
                           : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                       )}
                     >
                       <item.icon className="h-5 w-5" />
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {item.label}
-                  </TooltipContent>
+                  <TooltipContent side="right">{item.label}</TooltipContent>
                 </Tooltip>
               ) : (
                 <Link
                   key={item.href}
                   href={item.href}
                   className={cn(
-                    "flex h-10 items-center gap-3 rounded-md px-3 text-sm transition-colors",
+                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors",
                     isActive
-                      ? "bg-accent font-semibold text-accent-foreground"
+                      ? "bg-accent text-accent-foreground font-bold"
                       : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   )}
                 >
-                  <item.icon className="h-5 w-5 shrink-0" />
+                  <item.icon className="h-5 w-5" />
                   <span>{item.label}</span>
                 </Link>
               );
@@ -118,40 +119,34 @@ export function Sidebar() {
         </ScrollArea>
 
         {/* Footer */}
-        <div className="border-t p-2">
-          <div
-            className={cn(
-              "flex items-center gap-2",
-              isCollapsed ? "flex-col" : "justify-between px-2"
-            )}
-          >
+        <div className="border-t p-2 space-y-1">
+          <div className={cn("flex items-center", isCollapsed ? "justify-center" : "justify-between px-2")}>
             <ThemeToggle />
-            {isCollapsed ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8"
-                    onClick={() => signOut({ callbackUrl: "/login" })}
-                  >
-                    <LogOut className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="right">Logout</TooltipContent>
-              </Tooltip>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-8 gap-2 text-muted-foreground cursor-pointer"
-                onClick={() => signOut({ callbackUrl: "/login" })}
-              >
-                <LogOut className="h-4 w-4" />
-                <span>Logout</span>
-              </Button>
-            )}
           </div>
+          {isCollapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-10 w-10 mx-auto text-muted-foreground hover:text-destructive"
+                  onClick={() => signOut({ callbackUrl: "/login" })}
+                >
+                  <LogOut className="h-5 w-5" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent side="right">Logout</TooltipContent>
+            </Tooltip>
+          ) : (
+            <Button
+              variant="ghost"
+              className="w-full justify-start gap-3 text-muted-foreground hover:text-destructive"
+              onClick={() => signOut({ callbackUrl: "/login" })}
+            >
+              <LogOut className="h-5 w-5" />
+              <span>Logout</span>
+            </Button>
+          )}
         </div>
       </aside>
     </TooltipProvider>

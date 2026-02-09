@@ -26,20 +26,21 @@ import {
 } from "@/components/ui/form";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Loader2, CreditCard } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
+import { getAvailableCredit } from "@/actions/credit-notes";
 
 // ─── Schema ──────────────────────────────────────────────────────
-// IMPORTANT: Using z.number() instead of z.coerce.number().
-// In Zod v4, z.coerce infers the INPUT type as `unknown`, which
-// causes type mismatches with @hookform/resolvers v5 + RHF v7.71.
-// The string→number coercion is handled by the Input onChange
-// handlers via e.target.valueAsNumber instead.
 
 const stockFormSchema = z.object({
   productId: z.string().min(1, "Product is required"),
   supplierId: z.string().min(1, "Supplier is required"),
-  quantity: z.number({ message: "Quantity is required" }).positive("Quantity must be greater than 0"),
+  quantity: z
+    .number({ message: "Quantity is required" })
+    .positive("Quantity must be greater than 0"),
   measuringUnit: z.string().min(1, "Measuring unit is required"),
   buyingPricePerUnit: z
     .number({ message: "Buying price is required" })
@@ -52,7 +53,9 @@ const stockFormSchema = z.object({
   notes: z.string().optional(),
 });
 
-export type StockFormData = z.infer<typeof stockFormSchema>;
+export type StockFormData = z.infer<typeof stockFormSchema> & {
+  creditToApply?: number;
+};
 
 // ─── Types ───────────────────────────────────────────────────────
 
@@ -98,7 +101,12 @@ export function StockForm({
 }: StockFormProps) {
   const [submitting, setSubmitting] = useState(false);
 
-  const form = useForm<StockFormData>({
+  // Credit note state
+  const [availableCredit, setAvailableCredit] = useState(0);
+  const [useCredit, setUseCredit] = useState(false);
+  const [creditAmount, setCreditAmount] = useState("");
+
+  const form = useForm<z.infer<typeof stockFormSchema>>({
     resolver: zodResolver(stockFormSchema),
     defaultValues: {
       productId: "",
@@ -114,6 +122,7 @@ export function StockForm({
   });
 
   const watchedProductId = form.watch("productId");
+  const watchedSupplierId = form.watch("supplierId");
   const watchedQuantity = form.watch("quantity");
   const watchedBuyingPrice = form.watch("buyingPricePerUnit");
   const watchedPaymentStatus = form.watch("paymentStatus");
@@ -127,6 +136,22 @@ export function StockForm({
       }
     }
   }, [watchedProductId, products, form]);
+
+  // Fetch available credit when supplier changes
+  useEffect(() => {
+    if (watchedSupplierId) {
+      getAvailableCredit(watchedSupplierId).then((res) => {
+        setAvailableCredit(res.availableCredit);
+        // Reset credit usage when supplier changes
+        setUseCredit(false);
+        setCreditAmount("");
+      });
+    } else {
+      setAvailableCredit(0);
+      setUseCredit(false);
+      setCreditAmount("");
+    }
+  }, [watchedSupplierId]);
 
   // Calculate total cost for display
   const totalCost = useMemo(() => {
@@ -144,35 +169,65 @@ export function StockForm({
     }
   }, [watchedPaymentStatus, totalCost, form]);
 
+  // Calculate credit-related values
+  const creditToApply = useCredit ? parseFloat(creditAmount) || 0 : 0;
+  const cashPaid = form.watch("amountPaid") || 0;
+  const effectivePaid = cashPaid + creditToApply;
+  const outstandingAfter = Math.max(0, totalCost - effectivePaid);
+
+  // Max credit that can be applied
+  const maxCredit = useMemo(() => {
+    const remaining = totalCost - cashPaid;
+    return Math.min(availableCredit, Math.max(0, remaining));
+  }, [totalCost, cashPaid, availableCredit]);
+
+  // Helper for number inputs
+  const handleNumberChange =
+    (onChange: (value: number | undefined) => void) =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const val = e.target.valueAsNumber;
+      onChange(isNaN(val) ? undefined : val);
+    };
+
   // Cross-field validation + submit
-  const handleSubmit = async (data: StockFormData) => {
+  const handleSubmit = async (data: z.infer<typeof stockFormSchema>) => {
     let hasError = false;
 
-    // Validate: sellingPrice > buyingPrice
     if (data.sellingPricePerUnit <= data.buyingPricePerUnit) {
       form.setError("sellingPricePerUnit", {
-        type: "manual",
-        message: "Selling price must be greater than buying price",
+        message: "Must be higher than buying price",
       });
       hasError = true;
     }
 
-    // Validate: partial payment requires amountPaid > 0
     if (data.paymentStatus === "PARTIAL") {
       if (!data.amountPaid || data.amountPaid <= 0) {
+        form.setError("amountPaid", { message: "Required for partial payment" });
+        hasError = true;
+      }
+      const cost = (data.quantity || 0) * (data.buyingPricePerUnit || 0);
+      const totalWithCredit = (data.amountPaid || 0) + creditToApply;
+      if (totalWithCredit >= cost) {
         form.setError("amountPaid", {
-          type: "manual",
-          message: "Amount paid is required for partial payment",
+          message: "Cash + credit should be less than total. Use PAID status instead.",
         });
         hasError = true;
       }
+    }
+
+    // Validate credit doesn't exceed available
+    if (creditToApply > availableCredit) {
+      hasError = true;
     }
 
     if (hasError) return;
 
     setSubmitting(true);
     try {
-      await onSubmit(data);
+      await onSubmit({
+        ...data,
+        creditToApply: creditToApply > 0 ? creditToApply : undefined,
+      });
     } finally {
       setSubmitting(false);
     }
@@ -180,20 +235,13 @@ export function StockForm({
 
   const loading = isLoading || submitting;
 
-  // Helper: parse number from input, return undefined for empty/NaN
-  const handleNumberChange = (
-    onChange: (value: number | undefined) => void
-  ) => {
-    return (e: React.ChangeEvent<HTMLInputElement>) => {
-      const val = e.target.valueAsNumber;
-      onChange(isNaN(val) ? undefined : val);
-    };
-  };
+  // Get supplier name for credit badge
+  const selectedSupplier = suppliers.find((s) => s.id === watchedSupplierId);
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
-        {/* Product & Supplier Selection */}
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+        {/* Product & Supplier */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
@@ -201,16 +249,19 @@ export function StockForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Product *</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select product..." />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {products.map((product) => (
-                      <SelectItem key={product.id} value={product.id}>
-                        {product.name}
+                    {products.map((p) => (
+                      <SelectItem key={p.id} value={p.id}>
+                        {p.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -226,16 +277,19 @@ export function StockForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Supplier *</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select supplier..." />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    {suppliers.map((supplier) => (
-                      <SelectItem key={supplier.id} value={supplier.id}>
-                        {supplier.name} ({supplier.phoneNumber})
+                    {suppliers.map((s) => (
+                      <SelectItem key={s.id} value={s.id}>
+                        {s.name} ({s.phoneNumber})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -246,8 +300,22 @@ export function StockForm({
           />
         </div>
 
+        {/* Available Credit Badge */}
+        {availableCredit > 0 && selectedSupplier && (
+          <div className="flex items-center gap-2 p-3 rounded-lg border bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800">
+            <CreditCard className="h-4 w-4 text-blue-600" />
+            <span className="text-sm">
+              <span className="font-medium">{selectedSupplier.name}</span> has{" "}
+              <Badge variant="secondary" className="text-blue-700 bg-blue-100">
+                {formatCurrency(availableCredit)}
+              </Badge>{" "}
+              in available credit notes
+            </span>
+          </div>
+        )}
+
         {/* Quantity & Unit */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <FormField
             control={form.control}
             name="quantity"
@@ -277,8 +345,11 @@ export function StockForm({
             name="measuringUnit"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Measuring Unit *</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
+                <FormLabel>Unit *</FormLabel>
+                <Select
+                  onValueChange={field.onChange}
+                  value={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder="Select unit..." />
@@ -298,7 +369,7 @@ export function StockForm({
           />
         </div>
 
-        {/* Pricing */}
+        {/* Prices */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
@@ -343,7 +414,9 @@ export function StockForm({
                     ref={field.ref}
                   />
                 </FormControl>
-                <FormDescription>Must be higher than buying price</FormDescription>
+                <FormDescription>
+                  Must be higher than buying price
+                </FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -377,7 +450,10 @@ export function StockForm({
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Payment Status *</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue />
@@ -400,7 +476,7 @@ export function StockForm({
               name="amountPaid"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Amount Paid *</FormLabel>
+                  <FormLabel>Cash Amount Paid *</FormLabel>
                   <FormControl>
                     <Input
                       type="number"
@@ -414,15 +490,106 @@ export function StockForm({
                       ref={field.ref}
                     />
                   </FormControl>
-                  <FormDescription>
-                    Remaining: {formatCurrency(totalCost - (field.value || 0))}
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
           )}
         </div>
+
+        {/* Credit Note Application */}
+        {availableCredit > 0 &&
+          totalCost > 0 &&
+          watchedPaymentStatus !== "PAID" && (
+            <Card className="border-blue-200 dark:border-blue-800">
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-blue-600" />
+                    <Label className="text-sm font-medium">
+                      Apply Credit Notes
+                    </Label>
+                  </div>
+                  <Switch
+                    checked={useCredit}
+                    onCheckedChange={(checked) => {
+                      setUseCredit(checked);
+                      if (!checked) setCreditAmount("");
+                    }}
+                  />
+                </div>
+
+                {useCredit && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0.01"
+                        max={maxCredit}
+                        placeholder="0.00"
+                        value={creditAmount}
+                        onChange={(e) => setCreditAmount(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setCreditAmount(maxCredit.toFixed(2))
+                        }
+                      >
+                        Max ({formatCurrency(maxCredit)})
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Available: {formatCurrency(availableCredit)} · Max
+                      applicable: {formatCurrency(maxCredit)}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+        {/* Payment Summary (when credit is being used) */}
+        {totalCost > 0 && creditToApply > 0 && (
+          <Card className="bg-muted/50">
+            <CardContent className="pt-4 space-y-1">
+              <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                Payment Breakdown
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Total Cost</span>
+                <span>{formatCurrency(totalCost)}</span>
+              </div>
+              {cashPaid > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Cash/Bank</span>
+                  <span>{formatCurrency(cashPaid)}</span>
+                </div>
+              )}
+              <div className="flex justify-between text-sm text-blue-600">
+                <span>Credit Notes</span>
+                <span>{formatCurrency(creditToApply)}</span>
+              </div>
+              <Separator className="my-1" />
+              <div className="flex justify-between text-sm font-medium">
+                <span>Remaining Due</span>
+                <span
+                  className={
+                    outstandingAfter > 0 ? "text-destructive" : "text-green-600"
+                  }
+                >
+                  {outstandingAfter > 0
+                    ? formatCurrency(outstandingAfter)
+                    : "Fully Covered"}
+                </span>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Notes */}
         <FormField
@@ -434,7 +601,7 @@ export function StockForm({
               <FormControl>
                 <Textarea
                   placeholder="Enter notes (optional)"
-                  rows={3}
+                  rows={2}
                   {...field}
                 />
               </FormControl>
@@ -443,7 +610,7 @@ export function StockForm({
           )}
         />
 
-        {/* Actions */}
+        {/* Buttons */}
         <div className="flex justify-end gap-2 pt-2">
           <Button
             type="button"

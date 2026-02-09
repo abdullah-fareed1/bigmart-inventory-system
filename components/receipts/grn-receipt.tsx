@@ -3,23 +3,25 @@
 
 import { formatCurrency, formatDateTime, formatQuantity } from "@/lib/format";
 
-// ─── Types ───────────────────────────────────────────────────────
-
 interface GRNReceiptProps {
   stock: {
     grnNumber: string;
     suppliedDate: Date | string;
-    quantityAdded: number | string;
-    quantityRemaining: number | string;
-    measuringUnit: string;
-    buyingPricePerUnit: number | string;
-    sellingPricePerUnit: number | string;
-    totalCost: number | string;
-    amountPaid: number | string;
-    paymentStatus: string;
-    notes?: string | null;
     product: { name: string };
     supplier: { name: string; phoneNumber: string };
+    quantityAdded: number;
+    measuringUnit: string;
+    buyingPricePerUnit: number;
+    sellingPricePerUnit: number;
+    totalCost: number;
+    amountPaid: number;
+    paymentStatus: string;
+    notes?: string | null;
+    payments?: Array<{
+      paymentMethod: string;
+      amountPaid: number;
+      notes?: string | null;
+    }>;
   };
   shopSettings: {
     shopName: string;
@@ -28,12 +30,13 @@ interface GRNReceiptProps {
   };
 }
 
-// ─── Component ───────────────────────────────────────────────────
-
 export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
   const totalCost = Number(stock.totalCost);
   const amountPaid = Number(stock.amountPaid);
   const balance = totalCost - amountPaid;
+
+  // Group payments by method
+  const paymentBreakdown = getPaymentBreakdown(stock.payments || []);
 
   return (
     <div
@@ -50,7 +53,6 @@ export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
           }
           .grn-receipt { font-size: 12px; line-height: 1.4; color: #000; }
           .grn-receipt .center { text-align: center; }
-          .grn-receipt .right { text-align: right; }
           .grn-receipt .bold { font-weight: bold; }
           .grn-receipt .divider { border-top: 1px dashed #000; margin: 4px 0; }
           .grn-receipt .double-divider { border-top: 2px solid #000; margin: 4px 0; }
@@ -59,7 +61,6 @@ export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
         `}
       </style>
 
-      {/* Shop Header */}
       <div className="center">
         <div className="title">{shopSettings.shopName}</div>
         <div>{shopSettings.address}</div>
@@ -67,10 +68,7 @@ export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
       </div>
 
       <div className="double-divider" />
-
-      {/* GRN Header */}
       <div className="center bold title">GOODS RECEIVE NOTE</div>
-
       <div className="divider" />
 
       <div className="row">
@@ -83,21 +81,15 @@ export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
       </div>
 
       <div className="divider" />
-
-      {/* Supplier Info */}
       <div className="bold">Supplier:</div>
       <div>{stock.supplier.name}</div>
       <div>Tel: {stock.supplier.phoneNumber}</div>
 
       <div className="divider" />
-
-      {/* Product Info */}
       <div className="bold">Product:</div>
       <div>{stock.product.name}</div>
 
       <div className="divider" />
-
-      {/* Stock Details — NO selling price (internal info) */}
       <div className="row">
         <span>Quantity:</span>
         <span>
@@ -111,15 +103,33 @@ export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
 
       <div className="double-divider" />
 
-      {/* Payment Summary */}
       <div className="row bold">
         <span>Total Cost:</span>
         <span>{formatCurrency(totalCost)}</span>
       </div>
+
+      {/* Payment Breakdown */}
+      {paymentBreakdown.length > 0 && (
+        <>
+          <div className="divider" />
+          <div className="bold" style={{ fontSize: "10px" }}>
+            PAYMENT DETAILS:
+          </div>
+          {paymentBreakdown.map((item, i) => (
+            <div className="row" key={i}>
+              <span>{item.label}:</span>
+              <span>{formatCurrency(item.amount)}</span>
+            </div>
+          ))}
+          <div className="divider" />
+        </>
+      )}
+
       <div className="row">
-        <span>Amount Paid:</span>
-        <span>{formatCurrency(amountPaid)}</span>
+        <span>Total Paid:</span>
+        <span className="bold">{formatCurrency(amountPaid)}</span>
       </div>
+
       {balance > 0 && (
         <div className="row bold">
           <span>Balance Due:</span>
@@ -133,7 +143,6 @@ export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
 
       <div className="double-divider" />
 
-      {/* Notes */}
       {stock.notes && (
         <>
           <div className="bold">Notes:</div>
@@ -142,12 +151,9 @@ export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
         </>
       )}
 
-      {/* Footer */}
       <div className="center" style={{ marginTop: "8px" }}>
         <div>Received By: _______________</div>
-        <div style={{ marginTop: "16px" }}>
-          Signature: _______________
-        </div>
+        <div style={{ marginTop: "16px" }}>Signature: _______________</div>
       </div>
 
       <div className="divider" style={{ marginTop: "12px" }} />
@@ -158,10 +164,36 @@ export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
   );
 }
 
-/**
- * Opens a print window with the GRN receipt.
- * Call this from a button click handler.
- */
+// ─── Payment Breakdown Helper ────────────────────────────────────
+
+const METHOD_LABELS: Record<string, string> = {
+  CASH: "Cash",
+  BANK_TRANSFER: "Bank Transfer",
+  CHECK: "Cheque",
+  CREDIT_NOTE: "Credit Note",
+  DEBT_OFFSET: "Debt Offset",
+};
+
+function getPaymentBreakdown(
+  payments: Array<{ paymentMethod: string; amountPaid: number }>
+) {
+  if (!payments || payments.length === 0) return [];
+
+  // Group by method
+  const grouped: Record<string, number> = {};
+  for (const p of payments) {
+    const method = p.paymentMethod;
+    grouped[method] = (grouped[method] || 0) + Number(p.amountPaid);
+  }
+
+  return Object.entries(grouped).map(([method, amount]) => ({
+    label: METHOD_LABELS[method] || method,
+    amount: parseFloat(amount.toFixed(2)),
+  }));
+}
+
+// ─── Print Function ──────────────────────────────────────────────
+
 export function printGRN(
   stock: GRNReceiptProps["stock"],
   shopSettings: GRNReceiptProps["shopSettings"]
@@ -169,6 +201,17 @@ export function printGRN(
   const totalCost = Number(stock.totalCost);
   const amountPaid = Number(stock.amountPaid);
   const balance = totalCost - amountPaid;
+  const paymentBreakdown = getPaymentBreakdown(stock.payments || []);
+
+  const paymentDetailsHtml =
+    paymentBreakdown.length > 0
+      ? `
+    <div class="divider"></div>
+    <div class="bold" style="font-size: 10px;">PAYMENT DETAILS:</div>
+    ${paymentBreakdown.map((item) => `<div class="row"><span>${item.label}:</span><span>${formatCurrency(item.amount)}</span></div>`).join("")}
+    <div class="divider"></div>
+  `
+      : "";
 
   const html = `
 <!DOCTYPE html>
@@ -209,7 +252,8 @@ export function printGRN(
   <div class="row"><span>Unit Price:</span><span>${formatCurrency(stock.buyingPricePerUnit)}</span></div>
   <div class="double-divider"></div>
   <div class="row bold"><span>Total Cost:</span><span>${formatCurrency(totalCost)}</span></div>
-  <div class="row"><span>Amount Paid:</span><span>${formatCurrency(amountPaid)}</span></div>
+  ${paymentDetailsHtml}
+  <div class="row"><span>Total Paid:</span><span class="bold">${formatCurrency(amountPaid)}</span></div>
   ${balance > 0 ? `<div class="row bold"><span>Balance Due:</span><span>${formatCurrency(balance)}</span></div>` : ""}
   <div class="row"><span>Payment Status:</span><span class="bold">${stock.paymentStatus}</span></div>
   <div class="double-divider"></div>
@@ -227,8 +271,6 @@ export function printGRN(
   if (printWindow) {
     printWindow.document.write(html);
     printWindow.document.close();
-    printWindow.onload = () => {
-      printWindow.print();
-    };
+    printWindow.onload = () => printWindow.print();
   }
 }
