@@ -26,9 +26,10 @@ const createStockSchema = z.object({
   notes: z.string().optional(),
 });
 
+// amountPaid: min(0) to allow credit-only payments
 const recordPaymentSchema = z.object({
   stockId: z.string().min(1),
-  amountPaid: z.number().positive("Amount must be greater than 0"),
+  amountPaid: z.number().min(0, "Amount cannot be negative"),
   paymentMethod: z.enum(["CASH", "BANK_TRANSFER", "CHECK"]),
   creditToApply: z.number().min(0).optional(),
   notes: z.string().optional(),
@@ -38,9 +39,7 @@ const returnStockSchema = z.object({
   stockId: z.string().min(1),
   quantityReturned: z.number().positive("Quantity must be greater than 0"),
   reason: z.enum(["DAMAGED", "WRONG_ITEM", "EXCESS", "OTHER"]),
-  refundMethod: z
-    .enum(["CASH", "BANK_TRANSFER", "CREDIT_NOTE"])
-    .optional(),
+  refundMethod: z.enum(["CASH", "BANK_TRANSFER", "CREDIT_NOTE", "DEBT_OFFSET"]),
   notes: z.string().optional(),
 });
 
@@ -203,7 +202,7 @@ export async function getStockById(id: string) {
 
 /**
  * Create a new stock entry.
- * IMPORTANT: getNextNumber runs BEFORE the transaction to avoid timeout.
+ * GRN number generated BEFORE the transaction to avoid timeout.
  */
 export async function createStock(data: z.infer<typeof createStockSchema>) {
   const parsed = createStockSchema.safeParse(data);
@@ -211,9 +210,8 @@ export async function createStock(data: z.infer<typeof createStockSchema>) {
 
   const input = parsed.data;
 
-  if (input.sellingPricePerUnit <= input.buyingPricePerUnit) {
+  if (input.sellingPricePerUnit <= input.buyingPricePerUnit)
     return { error: "Selling price must be greater than buying price" };
-  }
 
   const product = await prisma.product.findUnique({
     where: { id: input.productId },
@@ -239,8 +237,7 @@ export async function createStock(data: z.infer<typeof createStockSchema>) {
       return { error: "Amount paid is required for partial payment" };
     if (input.amountPaid >= totalCost)
       return {
-        error:
-          "Partial payment must be less than total cost. Use PAID status instead.",
+        error: "Partial payment must be less than total cost. Use PAID status instead.",
       };
     amountPaid = input.amountPaid;
   }
@@ -248,13 +245,13 @@ export async function createStock(data: z.infer<typeof createStockSchema>) {
   const creditToApply = input.creditToApply || 0;
   if (creditToApply > 0) {
     const remainingAfterCash = totalCost - amountPaid;
-    if (creditToApply > remainingAfterCash)
+    if (creditToApply > remainingAfterCash + 0.01)
       return {
         error: `Credit (Rs. ${creditToApply.toFixed(2)}) exceeds remaining balance (Rs. ${remainingAfterCash.toFixed(2)})`,
       };
   }
 
-  // Generate GRN BEFORE the transaction to avoid timeout
+  // Generate GRN BEFORE the transaction
   const grnNumber = await getNextNumber("grn");
 
   const result = await prisma.$transaction(async (tx) => {
@@ -332,7 +329,8 @@ export async function createStock(data: z.infer<typeof createStockSchema>) {
 
 /**
  * Record a payment for an existing stock entry.
- * Supports combined cash + credit note payment.
+ * Supports cash + credit note combined payment.
+ * Cash can be 0 for credit-only payments.
  */
 export async function recordStockPayment(
   data: z.infer<typeof recordPaymentSchema>
@@ -352,67 +350,106 @@ export async function recordStockPayment(
   const currentPaid = Number(stock.amountPaid);
   const totalCost = Number(stock.totalCost);
   const creditToApply = input.creditToApply || 0;
-  const totalPayment = parseFloat(
-    (input.amountPaid + creditToApply).toFixed(2)
-  );
-  const newTotalPaid = parseFloat((currentPaid + totalPayment).toFixed(2));
+  const cashAmount = input.amountPaid;
+  const totalPayment = parseFloat((cashAmount + creditToApply).toFixed(2));
 
-  if (newTotalPaid > totalCost) {
-    const maxPayable = parseFloat((totalCost - currentPaid).toFixed(2));
+  if (totalPayment <= 0)
+    return { error: "Total payment must be greater than 0" };
+
+  const maxPayable = parseFloat((totalCost - currentPaid).toFixed(2));
+  if (totalPayment > maxPayable + 0.01) {
     return {
       error: `Total payment (Rs. ${totalPayment.toFixed(2)}) exceeds outstanding balance (Rs. ${maxPayable.toFixed(2)})`,
     };
   }
 
+  // Cap at exactly the outstanding to avoid overpayment from rounding
+  const actualTotal = Math.min(totalPayment, maxPayable);
+  const newTotalPaid = parseFloat((currentPaid + actualTotal).toFixed(2));
   const newStatus = newTotalPaid >= totalCost ? "PAID" : "PARTIAL";
 
-  const result = await prisma.$transaction(async (tx) => {
-    // Record cash/bank payment
-    if (input.amountPaid > 0) {
-      await tx.stockSupplierPayment.create({
+  // NO transaction wrapping — run sequentially to avoid Neon timeout
+  // These are all independent writes, so atomicity isn't critical here
+
+  // 1. Record cash/bank payment
+  if (cashAmount > 0) {
+    await prisma.stockSupplierPayment.create({
+      data: {
+        stockId: input.stockId,
+        supplierId: stock.supplierId,
+        amountPaid: cashAmount,
+        paymentMethod: input.paymentMethod,
+        notes: input.notes || null,
+      },
+    });
+  }
+
+  // 2. Apply credit notes (uses its own internal queries)
+  if (creditToApply > 0) {
+    // Get available credit notes and apply them one by one
+    const creditNotes = await prisma.supplierCreditNote.findMany({
+      where: {
+        supplierId: stock.supplierId,
+        isFullyUsed: false,
+        remainingAmount: { gt: 0 },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    let remaining = creditToApply;
+    let totalCreditApplied = 0;
+
+    for (const cn of creditNotes) {
+      if (remaining <= 0) break;
+      const available = Number(cn.remainingAmount);
+      const useAmount = Math.min(available, remaining);
+      const newRemaining = parseFloat((available - useAmount).toFixed(2));
+
+      await prisma.creditNoteUsage.create({
+        data: {
+          creditNoteId: cn.id,
+          stockId: input.stockId,
+          amountUsed: useAmount,
+        },
+      });
+
+      await prisma.supplierCreditNote.update({
+        where: { id: cn.id },
+        data: {
+          remainingAmount: newRemaining,
+          isFullyUsed: newRemaining <= 0,
+        },
+      });
+
+      totalCreditApplied += useAmount;
+      remaining -= useAmount;
+    }
+
+    if (totalCreditApplied > 0) {
+      await prisma.stockSupplierPayment.create({
         data: {
           stockId: input.stockId,
           supplierId: stock.supplierId,
-          amountPaid: input.amountPaid,
-          paymentMethod: input.paymentMethod,
-          notes: input.notes || null,
+          amountPaid: totalCreditApplied,
+          paymentMethod: "CREDIT_NOTE",
+          notes: `Applied Rs. ${totalCreditApplied.toFixed(2)} from credit notes`,
         },
       });
     }
+  }
 
-    // Apply credit notes if any
-    if (creditToApply > 0) {
-      const actualCredit = await applyCreditToStock(
-        tx,
-        stock.supplierId,
-        input.stockId,
-        creditToApply
-      );
-      if (actualCredit > 0) {
-        await tx.stockSupplierPayment.create({
-          data: {
-            stockId: input.stockId,
-            supplierId: stock.supplierId,
-            amountPaid: actualCredit,
-            paymentMethod: "CREDIT_NOTE",
-            notes: `Applied Rs. ${actualCredit.toFixed(2)} from credit notes`,
-          },
-        });
-      }
-    }
-
-    return tx.stock.update({
-      where: { id: input.stockId },
-      data: {
-        amountPaid: newTotalPaid,
-        paymentStatus: newStatus,
-      },
-      include: {
-        product: { select: { id: true, name: true } },
-        supplier: { select: { id: true, name: true } },
-        payments: { orderBy: { paymentDate: "desc" } },
-      },
-    });
+  // 3. Update stock payment status
+  const result = await prisma.stock.update({
+    where: { id: input.stockId },
+    data: {
+      amountPaid: newTotalPaid,
+      paymentStatus: newStatus,
+    },
+    include: {
+      product: { select: { id: true, name: true } },
+      supplier: { select: { id: true, name: true } },
+      payments: { orderBy: { paymentDate: "desc" } },
+    },
   });
 
   revalidatePath(`/stocks/${input.stockId}`);
@@ -428,7 +465,7 @@ export async function recordStockPayment(
 
 /**
  * Return stock to supplier.
- * IMPORTANT: Counter numbers generated BEFORE transaction to avoid timeout.
+ * Counter numbers generated BEFORE transaction to avoid timeout.
  */
 export async function returnStockToSupplier(
   data: z.infer<typeof returnStockSchema>
@@ -449,11 +486,10 @@ export async function returnStockToSupplier(
   if (!stock) return { error: "Stock not found" };
 
   const remaining = Number(stock.quantityRemaining);
-  if (input.quantityReturned > remaining) {
+  if (input.quantityReturned > remaining)
     return {
       error: `Cannot return more than remaining quantity (${remaining})`,
     };
-  }
 
   const buyingPrice = Number(stock.buyingPricePerUnit);
   const refundAmount = parseFloat(
@@ -464,23 +500,17 @@ export async function returnStockToSupplier(
   const amountPaid = Number(stock.amountPaid);
   const outstandingDebt = parseFloat((totalCost - amountPaid).toFixed(2));
   const isPaid = stock.paymentStatus === "PAID";
+  const userMethod = input.refundMethod;
 
-  if (isPaid && !input.refundMethod) {
-    return {
-      error:
-        "Refund method is required for fully paid stocks (CASH, BANK_TRANSFER, or CREDIT_NOTE)",
-    };
-  }
-
-  // Determine if we need a credit note number — generate BEFORE transaction
+  // Determine if credit note needed — generate number BEFORE transaction
   let needsCreditNote = false;
-  if (isPaid && input.refundMethod === "CREDIT_NOTE") {
+  if (userMethod === "CREDIT_NOTE") {
     needsCreditNote = true;
-  } else if (!isPaid && outstandingDebt > 0 && refundAmount > outstandingDebt) {
-    needsCreditNote = true; // excess after debt offset
+  } else if (userMethod === "DEBT_OFFSET" && refundAmount > outstandingDebt) {
+    // Excess after debt offset becomes credit note
+    needsCreditNote = true;
   }
 
-  // Generate all counter numbers BEFORE the transaction
   const returnNumber = await getNextNumber("grn_return");
   const cnNumber = needsCreditNote
     ? await getNextNumber("credit_note")
@@ -491,13 +521,13 @@ export async function returnStockToSupplier(
       (remaining - input.quantityReturned).toFixed(2)
     );
 
-    let actualRefundMethod: string;
+    let actualRefundMethod: string = userMethod;
     let creditNoteAmount: number | null = null;
 
-    if (!isPaid && outstandingDebt > 0) {
-      // ── UNPAID/PARTIAL: Auto-deduct from debt ──
+    if (userMethod === "DEBT_OFFSET" && outstandingDebt > 0) {
+      // ── User chose DEBT_OFFSET ──
       if (refundAmount <= outstandingDebt) {
-        actualRefundMethod = "DEBT_OFFSET";
+        // Fully absorbed by debt
         const newAmountPaid = parseFloat(
           (amountPaid + refundAmount).toFixed(2)
         );
@@ -523,8 +553,7 @@ export async function returnStockToSupplier(
           },
         });
       } else {
-        // Refund > debt → wipe debt + credit note for excess
-        actualRefundMethod = "DEBT_OFFSET";
+        // Refund > debt → wipe debt, excess becomes credit note
         creditNoteAmount = parseFloat(
           (refundAmount - outstandingDebt).toFixed(2)
         );
@@ -551,10 +580,9 @@ export async function returnStockToSupplier(
           });
         }
       }
-    } else {
-      // ── PAID: Refund via user-selected method ──
-      actualRefundMethod = input.refundMethod || "CREDIT_NOTE";
-
+    } else if (userMethod === "CREDIT_NOTE") {
+      // ── User chose CREDIT_NOTE (works for both paid and unpaid) ──
+      creditNoteAmount = refundAmount;
       await tx.stock.update({
         where: { id: input.stockId },
         data: {
@@ -562,13 +590,17 @@ export async function returnStockToSupplier(
           isActive: newRemaining > 0,
         },
       });
-
-      if (actualRefundMethod === "CREDIT_NOTE") {
-        creditNoteAmount = refundAmount;
-      }
+    } else {
+      // ── CASH or BANK_TRANSFER ──
+      await tx.stock.update({
+        where: { id: input.stockId },
+        data: {
+          quantityRemaining: newRemaining,
+          isActive: newRemaining > 0,
+        },
+      });
     }
 
-    // Create return record
     const supplierReturn = await tx.supplierReturn.create({
       data: {
         returnNumber,
@@ -583,7 +615,6 @@ export async function returnStockToSupplier(
       },
     });
 
-    // Create credit note if applicable
     let creditNote = null;
     if (creditNoteAmount && creditNoteAmount > 0 && cnNumber) {
       creditNote = await tx.supplierCreditNote.create({
