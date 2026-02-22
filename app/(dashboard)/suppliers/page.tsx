@@ -41,7 +41,6 @@ import {
 } from "@/components/forms/supplier-form";
 import { formatDate } from "@/lib/format";
 
-// ─── Types ───────────────────────────────────────────────────────
 
 interface SupplierRow {
   id: string;
