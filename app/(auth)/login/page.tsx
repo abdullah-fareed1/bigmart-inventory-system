@@ -129,7 +129,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-600 mt-6">
-          Textile POS v1.0 &copy; {new Date().getFullYear()}
+          Textile POS v1.3 &copy; {new Date().getFullYear()}
         </p>
       </div>
     </div>
