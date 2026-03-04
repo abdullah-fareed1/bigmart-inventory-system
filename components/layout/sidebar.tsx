@@ -56,7 +56,7 @@ export function Sidebar() {
         <div className="flex h-16 items-center justify-between border-b px-4">
           {!isCollapsed && (
             <span className="text-lg font-semibold tracking-tight">
-              Textile POS
+              Bigmart Textiles
             </span>
           )}
           <Button

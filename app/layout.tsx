@@ -8,8 +8,8 @@ import { Toaster } from "@/components/ui/sonner";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Textile POS",
-  description: "Point of Sale System for Textile Shop",
+  title: "Bigmart Textiles - Inventory & POS System",
+  description: "Inventory Management & Point of Sale System for Bigmart Textiles",
 };
 
 export default function RootLayout({

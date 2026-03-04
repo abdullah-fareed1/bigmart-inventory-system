@@ -99,7 +99,7 @@ export function SalesChart({ data, isLoading }: SalesChartProps) {
               <Line
                 type="monotone"
                 dataKey="amount"
-                stroke="hsl(var(--primary))"
+                stroke="#3b82f6"
                 strokeWidth={2}
                 dot={false}
                 activeDot={{ r: 4 }}

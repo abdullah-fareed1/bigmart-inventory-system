@@ -39,7 +39,7 @@ export async function signInAction(formData: FormData) {
   if (!validatedFields.success) {
     return {
       success: false,
-      error: validatedFields.error.message,
+      error: validatedFields.error.issues[0].message, // ✅ fixed .issues
     };
   }
 
@@ -56,11 +56,17 @@ export async function signInAction(formData: FormData) {
       switch (error.type) {
         case "CredentialsSignin":
           return { success: false, error: "Invalid email or password" };
+        case "CallbackRouteError":
+          // ✅ This is what NextAuth v5 throws when authorize() throws
+          return { success: false, error: "Invalid email or password" };
         default:
-          return { success: false, error: "Something went wrong" };
+          return {
+            success: false,
+            error: error.message ?? "Something went wrong",
+          };
       }
     }
-    throw error; // Re-throw for redirect errors (NextAuth uses these)
+    throw error; // re-throw NEXT_REDIRECT - this is the success path
   }
 }
 
