@@ -1,6 +1,6 @@
 {
-  "name": "cloud-erp-system",
-  "version": "0.1.0",
+  "name": "bigmart-inventory-management",
+  "version": "0.1.3",
   "private": true,
   "scripts": {
     "dev": "next dev",

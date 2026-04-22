@@ -80,7 +80,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
 
       if (!isLoggedIn) {
-        return false; // Redirect to login
+        return Response.redirect(new URL("/login", nextUrl));
       }
 
       return true;

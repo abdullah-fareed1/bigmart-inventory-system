@@ -33,6 +33,7 @@ import { toast } from "sonner";
 
 import { getSupplierById, updateSupplier } from "@/actions/suppliers";
 import { getStocks } from "@/actions/stocks";
+import { getSupplierBillsBySupplier } from "@/actions/supplier-bills";
 import { getCreditNotesBySupplier, getAvailableCredit } from "@/actions/credit-notes";
 import { SupplierForm, type SupplierFormData } from "@/components/forms/supplier-form";
 import { formatCurrency, formatDate, formatDateTime, formatQuantity } from "@/lib/format";
@@ -65,6 +66,8 @@ export default function SupplierDetailPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [stocks, setStocks] = useState<any[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [supplierBills, setSupplierBills] = useState<any[]>([]);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [creditNotes, setCreditNotes] = useState<any[]>([]);
   const [availableCredit, setAvailableCredit] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -73,10 +76,11 @@ export default function SupplierDetailPage() {
   const fetchAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [supplierResult, stocksResult, cnResult, creditResult] =
+      const [supplierResult, stocksResult, billsResult, cnResult, creditResult] =
         await Promise.all([
           getSupplierById(supplierId),
           getStocks({ supplierId, pageSize: 100 }),
+          getSupplierBillsBySupplier(supplierId),
           getCreditNotesBySupplier(supplierId),
           getAvailableCredit(supplierId),
         ]);
@@ -93,6 +97,7 @@ export default function SupplierDetailPage() {
       }
 
       setStocks(stocksResult.stocks);
+      setSupplierBills(billsResult.bills);
       setCreditNotes(cnResult.creditNotes);
       setAvailableCredit(creditResult.availableCredit);
     } catch {
@@ -191,6 +196,9 @@ export default function SupplierDetailPage() {
           <TabsTrigger value="stocks">
             Stocks ({stocks.length})
           </TabsTrigger>
+          <TabsTrigger value="bills">
+            Bills ({supplierBills.length})
+          </TabsTrigger>
           <TabsTrigger value="credit-notes">
             Credit Notes ({creditNotes.length})
           </TabsTrigger>
@@ -250,6 +258,69 @@ export default function SupplierDetailPage() {
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(s.suppliedDate)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </TabsContent>
+
+        {/* Bills Tab */}
+        <TabsContent value="bills" className="border rounded-lg mt-4">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Bill #</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead className="text-right"># Products</TableHead>
+                <TableHead className="text-right">Total Cost</TableHead>
+                <TableHead className="text-right">Paid</TableHead>
+                <TableHead className="text-right">Balance Due</TableHead>
+                <TableHead>Status</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {supplierBills.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-6 text-muted-foreground">
+                    No bills from this supplier
+                  </TableCell>
+                </TableRow>
+              ) : (
+                supplierBills.map((bill) => {
+                  const totalCost = Number(bill.totalCost);
+                  const amountPaid = Number(bill.amountPaid);
+                  const balanceDue = Math.max(0, totalCost - amountPaid);
+                  return (
+                    <TableRow
+                      key={bill.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onClick={() => router.push(`/supplier-bills/${bill.id}`)}
+                    >
+                      <TableCell className="font-mono text-sm">{bill.billNumber}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {formatDate(bill.billDate)}
+                      </TableCell>
+                      <TableCell className="text-right">{bill.stocks.length}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(totalCost)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(amountPaid)}</TableCell>
+                      <TableCell className={`text-right ${balanceDue > 0 ? "text-destructive font-medium" : ""}`}>
+                        {balanceDue > 0 ? formatCurrency(balanceDue) : "—"}
+                      </TableCell>
+                      <TableCell>
+                        <Badge
+                          variant={
+                            bill.paymentStatus === "PAID"
+                              ? "default"
+                              : bill.paymentStatus === "PARTIAL"
+                                ? "secondary"
+                                : "destructive"
+                          }
+                        >
+                          {bill.paymentStatus}
+                        </Badge>
                       </TableCell>
                     </TableRow>
                   );

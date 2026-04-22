@@ -32,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import { Loader2, CreditCard } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import { getAvailableCredit } from "@/actions/credit-notes";
+import { checkMergeableStock } from "@/actions/stocks";
 
 // ─── Schema ──────────────────────────────────────────────────────
 
@@ -106,6 +107,14 @@ export function StockForm({
   const [useCredit, setUseCredit] = useState(false);
   const [creditAmount, setCreditAmount] = useState("");
 
+  // Merge preview state
+  const [mergeTarget, setMergeTarget] = useState<{
+    id: string;
+    grnNumber: string;
+    quantityRemaining: number;
+  } | null>(null);
+  const [isMergeChecking, setIsMergeChecking] = useState(false);
+
   const form = useForm<z.infer<typeof stockFormSchema>>({
     resolver: zodResolver(stockFormSchema),
     defaultValues: {
@@ -126,6 +135,8 @@ export function StockForm({
   const watchedQuantity = form.watch("quantity");
   const watchedBuyingPrice = form.watch("buyingPricePerUnit");
   const watchedPaymentStatus = form.watch("paymentStatus");
+  const watchedSellingPrice = form.watch("sellingPricePerUnit");
+  const watchedUnit = form.watch("measuringUnit");
 
   // Auto-set measuring unit when product changes
   useEffect(() => {
@@ -136,6 +147,41 @@ export function StockForm({
       }
     }
   }, [watchedProductId, products, form]);
+
+  // Check for mergeable stock when criteria fields change
+  useEffect(() => {
+    if (
+      !watchedProductId ||
+      !watchedSupplierId ||
+      !watchedBuyingPrice ||
+      !watchedSellingPrice ||
+      !watchedUnit
+    ) {
+      setMergeTarget(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsMergeChecking(true);
+      const result = await checkMergeableStock({
+        productId: watchedProductId,
+        supplierId: watchedSupplierId,
+        buyingPricePerUnit: watchedBuyingPrice,
+        sellingPricePerUnit: watchedSellingPrice,
+        measuringUnit: watchedUnit,
+      });
+      setMergeTarget(result.mergeTarget);
+      setIsMergeChecking(false);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [
+    watchedProductId,
+    watchedSupplierId,
+    watchedBuyingPrice,
+    watchedSellingPrice,
+    watchedUnit,
+  ]);
 
   // Fetch available credit when supplier changes
   useEffect(() => {
@@ -237,6 +283,10 @@ export function StockForm({
 
   // Get supplier name for credit badge
   const selectedSupplier = suppliers.find((s) => s.id === watchedSupplierId);
+
+  // Helper to format quantity
+  const formatQuantity = (qty: number, unit: string) =>
+    `${qty.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}`;
 
   return (
     <Form {...form}>
@@ -438,6 +488,19 @@ export function StockForm({
               </p>
             </CardContent>
           </Card>
+        )}
+
+        {/* Merge preview banner */}
+        {mergeTarget && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-800 p-3">
+            <p className="text-sm text-blue-700 dark:text-blue-300">
+              ℹ️ A matching stock record already exists (<span className="font-mono font-medium">{mergeTarget.grnNumber}</span>, {formatQuantity(mergeTarget.quantityRemaining, watchedUnit)} remaining). 
+              Adding this will increase the existing stock instead of creating a new entry.
+            </p>
+          </div>
+        )}
+        {isMergeChecking && (
+          <p className="text-xs text-muted-foreground">Checking for existing stock...</p>
         )}
 
         <Separator />

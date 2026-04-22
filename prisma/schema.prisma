@@ -73,7 +73,7 @@ model Supplier {
   updatedAt   DateTime  @updatedAt
 
   stocks          Stock[]
-  payments        StockSupplierPayment[]
+  supplierBills   SupplierBill[]
   supplierReturns SupplierReturn[]
   creditNotes     SupplierCreditNote[]
 
@@ -124,6 +124,61 @@ model ProductUnitConversion {
   @@index([productId])
 }
 
+// ==========================================
+// SUPPLIER BILL SYSTEM (new)
+// ==========================================
+// A SupplierBill represents one delivery/invoice from a supplier.
+// It groups one or more Stock entries (products received in that delivery).
+// Payment is tracked at the bill level, not per-stock.
+
+model SupplierBill {
+  id         String   @id @default(cuid())
+  billNumber String   @unique  // e.g. SB-00001
+
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  // Supplier's own invoice reference (optional, for cross-checking)
+  supplierInvoiceRef String?
+
+  // Totals are denormalized for fast reads; recomputed on item change
+  totalCost   Decimal @db.Decimal(10, 2)
+  amountPaid  Decimal @default(0) @db.Decimal(10, 2)
+
+  // UNPAID | PARTIAL | PAID
+  paymentStatus String @default("UNPAID")
+
+  notes     String?   @db.Text
+  isActive  Boolean   @default(true)
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  stocks   Stock[]              // all stock entries in this bill
+  payments SupplierBillPayment[]
+
+  @@index([supplierId])
+  @@index([paymentStatus])
+  @@index([createdAt])
+}
+
+model SupplierBillPayment {
+  id           String       @id @default(cuid())
+  billId       String
+  bill         SupplierBill @relation(fields: [billId], references: [id])
+  supplierId   String
+
+  amountPaid    Decimal @db.Decimal(10, 2)
+  paymentMethod String  // CASH | BANK_TRANSFER | CHECK | CREDIT_NOTE | DEBT_OFFSET
+  paymentDate   DateTime @default(now())
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now())
+
+  @@index([billId])
+  @@index([supplierId])
+  @@index([paymentDate])
+}
+
 model Stock {
   id        String @id @default(cuid())
   grnNumber String @unique
@@ -132,6 +187,10 @@ model Stock {
   product    Product  @relation(fields: [productId], references: [id])
   supplierId String
   supplier   Supplier @relation(fields: [supplierId], references: [id])
+
+  // Optional link to a SupplierBill (null = standalone stock added without a bill)
+  supplierBillId String?
+  supplierBill   SupplierBill? @relation(fields: [supplierBillId], references: [id])
 
   quantityAdded     Decimal @db.Decimal(10, 2)
   quantityRemaining Decimal @db.Decimal(10, 2)
@@ -142,6 +201,9 @@ model Stock {
 
   suppliedDate DateTime @default(now())
 
+  // --- Legacy payment fields (kept for standalone stocks not linked to a bill) ---
+  // When a stock IS linked to a SupplierBill, these mirror the bill's proportional values
+  // and are kept for backward compat with existing views/queries.
   paymentStatus String  @default("UNPAID")
   amountPaid    Decimal @default(0) @db.Decimal(10, 2)
   totalCost     Decimal @db.Decimal(10, 2)
@@ -152,18 +214,21 @@ model Stock {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  payments         StockSupplierPayment[]
+  payments         StockSupplierPayment[]  // kept for standalone stock payments
   supplierReturns  SupplierReturn[]
   transactionItems TransactionItem[]
   creditNoteUsages CreditNoteUsage[]
 
   @@index([productId])
   @@index([supplierId])
+  @@index([supplierBillId])
   @@index([isActive])
   @@index([quantityRemaining])
   @@index([suppliedDate])
   @@index([paymentStatus])
   @@index([productId, isActive, quantityRemaining, suppliedDate])
+  // Merge lookup index: find existing mergeable stock
+  @@index([productId, supplierId, buyingPricePerUnit, sellingPricePerUnit, isActive])
 }
 
 model StockSupplierPayment {
@@ -171,7 +236,6 @@ model StockSupplierPayment {
   stockId       String
   stock         Stock    @relation(fields: [stockId], references: [id])
   supplierId    String
-  supplier      Supplier @relation(fields: [supplierId], references: [id])
   amountPaid    Decimal  @db.Decimal(10, 2)
   paymentMethod String
   paymentDate   DateTime @default(now())
@@ -209,7 +273,7 @@ model SupplierReturn {
 }
 
 // ==========================================
-// CREDIT NOTE SYSTEM (Phase 4B)
+// CREDIT NOTE SYSTEM
 // ==========================================
 
 model SupplierCreditNote {
@@ -242,11 +306,15 @@ model CreditNoteUsage {
   stockId      String
   stock        Stock              @relation(fields: [stockId], references: [id])
 
+  // Optional: when credit is used via a bill payment rather than per-stock
+  billId String?
+
   amountUsed Decimal  @db.Decimal(10, 2)
   usedAt     DateTime @default(now())
 
   @@index([creditNoteId])
   @@index([stockId])
+  @@index([billId])
 }
 
 // ==========================================

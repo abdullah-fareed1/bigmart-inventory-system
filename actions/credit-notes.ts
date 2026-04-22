@@ -126,7 +126,8 @@ export async function applyCreditToStock(
   tx: any,
   supplierId: string,
   stockId: string,
-  amountToApply: number
+  amountToApply: number,
+  billId?: string,
 ): Promise<number> {
   if (amountToApply <= 0) return 0;
 
@@ -154,6 +155,7 @@ export async function applyCreditToStock(
         creditNoteId: cn.id,
         stockId,
         amountUsed: useAmount,
+        billId: billId ?? null,
       },
     });
 

@@ -316,10 +316,19 @@ export default function StockDetailPage() {
           <Button variant="outline" onClick={handlePrintGRN}>
             <Printer className="mr-2 h-4 w-4" /> Print GRN
           </Button>
-          {!isPaid && (
-            <Button onClick={openPaymentDialog}>
-              <CreditCard className="mr-2 h-4 w-4" /> Record Payment
+          {stock.supplierBillId ? (
+            <Button
+              variant="outline"
+              onClick={() => router.push(`/supplier-bills/${stock.supplierBillId}`)}
+            >
+              <FileText className="mr-2 h-4 w-4" /> View Bill
             </Button>
+          ) : (
+            !isPaid && (
+              <Button onClick={openPaymentDialog}>
+                <CreditCard className="mr-2 h-4 w-4" /> Record Payment
+              </Button>
+            )
           )}
           {remaining > 0 && (
             <Button variant="destructive" onClick={() => setShowReturnDialog(true)}>
@@ -369,6 +378,31 @@ export default function StockDetailPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Part of Supplier Bill Card */}
+      {stock.supplierBill && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              Part of Supplier Bill
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-muted-foreground">
+              This stock was received as part of{" "}
+              <Button
+                variant="link"
+                className="h-auto p-0 font-mono"
+                onClick={() => router.push(`/supplier-bills/${stock.supplierBill!.id}`)}
+              >
+                {stock.supplierBill.billNumber}
+              </Button>
+              . Payment is managed at the bill level.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Payment History */}
       {stock.payments && stock.payments.length > 0 && (

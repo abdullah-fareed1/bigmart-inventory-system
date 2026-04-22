@@ -24,6 +24,7 @@ const createStockSchema = z.object({
   amountPaid: z.number().min(0).optional(),
   creditToApply: z.number().min(0).optional(),
   notes: z.string().optional(),
+  supplierBillId: z.string().optional(),
 });
 
 // amountPaid: min(0) to allow credit-only payments
@@ -86,6 +87,91 @@ export type StockDetail = NonNullable<
 
 // ─── Actions ─────────────────────────────────────────────────────
 
+async function findMergeableStock(params: {
+  productId: string;
+  supplierId: string;
+  buyingPricePerUnit: number;
+  sellingPricePerUnit: number;
+  measuringUnit: string;
+}): Promise<string | null> {
+  // Returns the id of a matching mergeable stock, or null.
+  // Mergeable criteria: same product, supplier, buying price, selling price,
+  // unit, still active, not soft-deleted, and NOT linked to any supplier bill.
+  // Billed stocks are never merge targets.
+  // When multiple matches exist (shouldn't happen but just in case),
+  // we pick the oldest one (suppliedDate ASC) so FIFO remains consistent.
+  const existing = await prisma.stock.findFirst({
+    where: {
+      productId: params.productId,
+      supplierId: params.supplierId,
+      buyingPricePerUnit: params.buyingPricePerUnit,
+      sellingPricePerUnit: params.sellingPricePerUnit,
+      measuringUnit: params.measuringUnit,
+      isActive: true,
+      deletedAt: null,
+      supplierBillId: null,
+    },
+    orderBy: { suppliedDate: "asc" },
+    select: { id: true },
+  });
+  return existing?.id ?? null;
+}
+
+export async function checkMergeableStock(params: {
+  productId: string;
+  supplierId: string;
+  buyingPricePerUnit: number;
+  sellingPricePerUnit: number;
+  measuringUnit: string;
+}): Promise<{
+  mergeTarget: { id: string; grnNumber: string; quantityRemaining: number } | null;
+}> {
+  try {
+    if (
+      !params.productId ||
+      !params.supplierId ||
+      !params.buyingPricePerUnit ||
+      !params.sellingPricePerUnit ||
+      !params.measuringUnit
+    ) {
+      return { mergeTarget: null };
+    }
+
+    const existing = await prisma.stock.findFirst({
+      where: {
+        productId: params.productId,
+        supplierId: params.supplierId,
+        buyingPricePerUnit: params.buyingPricePerUnit,
+        sellingPricePerUnit: params.sellingPricePerUnit,
+        measuringUnit: params.measuringUnit,
+        isActive: true,
+        deletedAt: null,
+        supplierBillId: null,
+      },
+      orderBy: { suppliedDate: "asc" },
+      select: {
+        id: true,
+        grnNumber: true,
+        quantityRemaining: true,
+      },
+    });
+
+    if (!existing) return { mergeTarget: null };
+
+    return {
+      mergeTarget: {
+        id: existing.id,
+        grnNumber: existing.grnNumber,
+        quantityRemaining: Number(existing.quantityRemaining),
+      },
+    };
+  } catch {
+    return { mergeTarget: null };
+  }
+}
+
+// ─── Actions ─────────────────────────────────────────────────────
+
 export async function getStocks(params?: {
   search?: string;
   supplierId?: string;
@@ -127,6 +213,12 @@ export async function getStocks(params?: {
       include: {
         product: { select: { id: true, name: true, primaryUnit: true } },
         supplier: { select: { id: true, name: true, phoneNumber: true } },
+        supplierBill: {
+          select: {
+            id: true,
+            billNumber: true,
+          },
+        },
       },
       orderBy: { suppliedDate: "desc" },
       skip: (page - 1) * pageSize,
@@ -152,6 +244,15 @@ export async function getStockById(id: string) {
         select: { id: true, name: true, primaryUnit: true, imageUrl: true },
       },
       supplier: { select: { id: true, name: true, phoneNumber: true } },
+      supplierBill: {
+        select: {
+          id: true,
+          billNumber: true,
+          paymentStatus: true,
+          totalCost: true,
+          amountPaid: true,
+        },
+      },
       payments: { orderBy: { paymentDate: "desc" } },
       supplierReturns: {
         orderBy: { returnDate: "desc" },
@@ -183,6 +284,13 @@ export async function getStockById(id: string) {
   return {
     stock: {
       ...serializeStock(rawStock),
+      supplierBill: rawStock.supplierBill
+        ? {
+            ...rawStock.supplierBill,
+            totalCost: Number(rawStock.supplierBill.totalCost),
+            amountPaid: Number(rawStock.supplierBill.amountPaid),
+          }
+        : null,
       payments: rawStock.payments.map((p) => serializePayment(p)),
       supplierReturns: rawStock.supplierReturns.map((r) => ({
         ...serializeReturn(r),
@@ -251,6 +359,45 @@ export async function createStock(data: z.infer<typeof createStockSchema>) {
       };
   }
 
+  // --- MERGE CHECK (standalone stocks only) ---
+  // Only runs when this stock is NOT part of a supplier bill.
+  // If a mergeable stock exists, increment its quantities instead of
+  // creating a new record. Return early with merged: true.
+  if (!input.supplierBillId) {
+    const mergeTargetId = await findMergeableStock({
+      productId: input.productId,
+      supplierId: input.supplierId,
+      buyingPricePerUnit: input.buyingPricePerUnit,
+      sellingPricePerUnit: input.sellingPricePerUnit,
+      measuringUnit: input.measuringUnit,
+    });
+
+    if (mergeTargetId) {
+      const merged = await prisma.stock.update({
+        where: { id: mergeTargetId },
+        data: {
+          quantityAdded: { increment: input.quantity },
+          quantityRemaining: { increment: input.quantity },
+          totalCost: { increment: totalCost },
+          // paymentStatus and amountPaid are intentionally NOT updated here.
+          // The caller should use recordStockPayment() separately if payment
+          // needs to be recorded for the merged quantity.
+        },
+        include: {
+          product: { select: { id: true, name: true } },
+          supplier: { select: { id: true, name: true } },
+        },
+      });
+
+      revalidatePath("/stocks");
+      revalidatePath("/dashboard");
+      revalidatePath(`/suppliers/${input.supplierId}`);
+
+      return { stock: serializeStock(merged), merged: true };
+    }
+  }
+  // --- END MERGE CHECK ---
+
   // Generate GRN BEFORE the transaction
   const grnNumber = await getNextNumber("grn");
 
@@ -270,6 +417,7 @@ export async function createStock(data: z.infer<typeof createStockSchema>) {
         grnNumber,
         productId: input.productId,
         supplierId: input.supplierId,
+        supplierBillId: input.supplierBillId ?? null,
         quantityAdded: input.quantity,
         quantityRemaining: input.quantity,
         measuringUnit: input.measuringUnit,
@@ -303,7 +451,8 @@ export async function createStock(data: z.infer<typeof createStockSchema>) {
         tx,
         input.supplierId,
         stock.id,
-        creditToApply
+        creditToApply,
+        undefined,
       );
       if (actualCredit > 0) {
         await tx.stockSupplierPayment.create({
@@ -324,7 +473,7 @@ export async function createStock(data: z.infer<typeof createStockSchema>) {
   revalidatePath("/stocks");
   revalidatePath("/dashboard");
   revalidatePath(`/suppliers/${input.supplierId}`);
-  return { stock: serializeStock(result) };
+  return { stock: serializeStock(result), merged: false };
 }
 
 /**

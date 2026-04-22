@@ -26,77 +26,63 @@ export async function getDashboardStats() {
   // This month range
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [
-    todaySales,
-    yesterdaySales,
-    weekSales,
-    prevWeekSales,
-    totalCustomers,
-    newCustomersThisMonth,
-    lowStockCount,
-    todayTransactionCount,
-  ] = await Promise.all([
-    // Today's sales total
-    prisma.transaction.aggregate({
-      _sum: { totalAmount: true },
-      where: {
-        saleDateTime: { gte: todayStart, lt: todayEnd },
-      },
-    }),
+  try {
+    // Batch 1: Customer stats (low overhead)
+    const [totalCustomers, newCustomersThisMonth] = await Promise.all([
+      prisma.customer.count({
+        where: { isActive: true, deletedAt: null },
+      }),
+      prisma.customer.count({
+        where: {
+          joinedDate: { gte: monthStart },
+          deletedAt: null,
+        },
+      }),
+    ]);
 
-    // Yesterday's sales total
-    prisma.transaction.aggregate({
-      _sum: { totalAmount: true },
-      where: {
-        saleDateTime: { gte: yesterdayStart, lt: todayStart },
-      },
-    }),
+    // Batch 2: Stock stats
+    const [lowStockCount] = await Promise.all([
+      prisma.stock.count({
+        where: {
+          isActive: true,
+          deletedAt: null,
+          quantityRemaining: { lt: 10 },
+        },
+      }),
+    ]);
 
-    // This week's sales total
-    prisma.transaction.aggregate({
-      _sum: { totalAmount: true },
-      where: {
-        saleDateTime: { gte: weekStart, lt: todayEnd },
-      },
-    }),
-
-    // Previous week's sales total
-    prisma.transaction.aggregate({
-      _sum: { totalAmount: true },
-      where: {
-        saleDateTime: { gte: prevWeekStart, lt: weekStart },
-      },
-    }),
-
-    // Total active customers
-    prisma.customer.count({
-      where: { isActive: true, deletedAt: null },
-    }),
-
-    // New customers this month
-    prisma.customer.count({
-      where: {
-        joinedDate: { gte: monthStart },
-        deletedAt: null,
-      },
-    }),
-
-    // Low stock count (below 10 units)
-    prisma.stock.count({
-      where: {
-        isActive: true,
-        deletedAt: null,
-        quantityRemaining: { lt: 10 },
-      },
-    }),
-
-    // Today's transaction count
-    prisma.transaction.count({
-      where: {
-        saleDateTime: { gte: todayStart, lt: todayEnd },
-      },
-    }),
-  ]);
+    // Batch 3: Transaction stats (may be slower, execute separately)
+    const [todaySales, yesterdaySales, weekSales, prevWeekSales, todayTransactionCount] = await Promise.all([
+      prisma.transaction.aggregate({
+        _sum: { totalAmount: true },
+        where: {
+          saleDateTime: { gte: todayStart, lt: todayEnd },
+        },
+      }),
+      prisma.transaction.aggregate({
+        _sum: { totalAmount: true },
+        where: {
+          saleDateTime: { gte: yesterdayStart, lt: todayStart },
+        },
+      }),
+      prisma.transaction.aggregate({
+        _sum: { totalAmount: true },
+        where: {
+          saleDateTime: { gte: weekStart, lt: todayEnd },
+        },
+      }),
+      prisma.transaction.aggregate({
+        _sum: { totalAmount: true },
+        where: {
+          saleDateTime: { gte: prevWeekStart, lt: weekStart },
+        },
+      }),
+      prisma.transaction.count({
+        where: {
+          saleDateTime: { gte: todayStart, lt: todayEnd },
+        },
+      }),
+    ]);
 
   const todayTotal = Number(todaySales._sum.totalAmount ?? 0);
   const yesterdayTotal = Number(yesterdaySales._sum.totalAmount ?? 0);
@@ -128,6 +114,20 @@ export async function getDashboardStats() {
     lowStockCount,
     todayTransactionCount,
   };
+  } catch (error) {
+    console.error("Dashboard stats error:", error);
+    // Return default values if queries timeout
+    return {
+      todaySales: 0,
+      dailyTrend: 0,
+      weekSales: 0,
+      weeklyTrend: 0,
+      totalCustomers: 0,
+      newCustomersThisMonth: 0,
+      lowStockCount: 0,
+      todayTransactionCount: 0,
+    };
+  }
 }
 
 export async function getSalesChartData() {

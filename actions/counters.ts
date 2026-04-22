@@ -3,7 +3,7 @@
 
 import { prisma } from "@/lib/prisma";
 
-type CounterType = "receipt" | "refund" | "grn" | "grn_return" | "credit_note";
+type CounterType = "receipt" | "refund" | "grn" | "grn_return" | "credit_note" | "supplier_bill";
 
 const PREFIX_MAP: Record<CounterType, string> = {
   receipt: "REC",
@@ -11,6 +11,7 @@ const PREFIX_MAP: Record<CounterType, string> = {
   grn: "GRN",
   grn_return: "GRN-RET",
   credit_note: "CN",
+  supplier_bill: "SB",
 };
 
 export async function getNextNumber(type: CounterType): Promise<string> {

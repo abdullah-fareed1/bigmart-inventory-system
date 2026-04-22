@@ -29,7 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Search, Package, AlertTriangle } from "lucide-react";
+import { Plus, Search, Package, AlertTriangle, FileText } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -152,14 +152,18 @@ export default function StocksPage() {
     setShowAddDialog(true);
   };
 
-  // Handle create stock
+    // Handle create stock
   const handleCreateStock = async (data: StockFormData) => {
     const result = await createStock(data);
     if (result.error) {
       toast.error(result.error);
       return;
     }
-    toast.success(`Stock added with GRN: ${result.stock?.grnNumber}`);
+    if (result.merged) {
+      toast.success(`Stock merged into existing record — quantity updated`);
+    } else {
+      toast.success(`Stock added with GRN: ${result.stock?.grnNumber}`);
+    }
     setShowAddDialog(false);
     fetchStocks();
   };
@@ -184,10 +188,16 @@ export default function StocksPage() {
             Manage stock entries and supplier payments
           </p>
         </div>
-        <Button onClick={handleOpenAddDialog}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Stock
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.push("/supplier-bills")}>
+            <FileText className="mr-2 h-4 w-4" />
+            Add Supplier Bill
+          </Button>
+          <Button onClick={handleOpenAddDialog}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Single Stock
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -244,6 +254,7 @@ export default function StocksPage() {
           <TableHeader>
             <TableRow>
               <TableHead>GRN #</TableHead>
+              <TableHead>Source</TableHead>
               <TableHead>Product</TableHead>
               <TableHead>Supplier</TableHead>
               <TableHead className="text-right">Qty Remaining</TableHead>
@@ -257,7 +268,7 @@ export default function StocksPage() {
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 8 }).map((_, j) => (
+                  {Array.from({ length: 9 }).map((_, j) => (
                     <TableCell key={j}>
                       <Skeleton className="h-4 w-full" />
                     </TableCell>
@@ -266,7 +277,7 @@ export default function StocksPage() {
               ))
             ) : stocks.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8">
+                <TableCell colSpan={9} className="text-center py-8">
                   <Package className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
                   <p className="text-muted-foreground">No stocks found</p>
                 </TableCell>
@@ -285,6 +296,22 @@ export default function StocksPage() {
                   >
                     <TableCell className="font-mono text-sm">
                       {stock.grnNumber}
+                    </TableCell>
+                    <TableCell>
+                      {stock.supplierBill ? (
+                        <Badge
+                          variant="outline"
+                          className="font-mono text-xs cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(`/supplier-bills/${stock.supplierBill!.id}`);
+                          }}
+                        >
+                          {stock.supplierBill.billNumber}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">Standalone</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -366,7 +393,7 @@ export default function StocksPage() {
 
       {/* Add Stock Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto w-[95vw]">
           <DialogHeader>
             <DialogTitle>Add New Stock</DialogTitle>
             <DialogDescription>
