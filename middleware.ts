@@ -2,7 +2,67 @@
 
 export const runtime = "nodejs";
 
-export { auth as middleware } from "./auth";
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "./auth";
+import { canAccessRoute } from "./lib/permissions";
+
+// Protected routes that require role-based access control
+const PROTECTED_ROUTES = [
+  "/dashboard",
+  "/pos",
+  "/transactions",
+  "/products",
+  "/stocks",
+  "/suppliers",
+  "/supplier-bills",
+  "/customers",
+  "/settings",
+];
+
+export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname;
+
+  // Allow login page without authentication
+  if (pathname === "/login") {
+    const session = await auth();
+    if (session?.user) {
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+    return NextResponse.next();
+  }
+
+  // Check if accessing any protected route
+  const isProtectedRoute = PROTECTED_ROUTES.some((route) =>
+    pathname === route || pathname.startsWith(route + "/")
+  );
+
+  if (isProtectedRoute) {
+    // Get the session
+    const session = await auth();
+
+    // Require authentication for protected routes
+    if (!session?.user) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+
+    // Check role-based access for protected routes
+    const hasAccess = canAccessRoute(session as any, pathname);
+
+    if (!hasAccess) {
+      // User doesn't have permission to access this route
+      // Redirect to dashboard
+      return NextResponse.redirect(new URL("/dashboard", request.url));
+    }
+  } else if (!pathname.startsWith("/api") && !pathname.startsWith("/_next")) {
+    // For non-protected routes, still require authentication
+    const session = await auth();
+    if (!session?.user) {
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+  }
+
+  return NextResponse.next();
+}
 
 export const config = {
   matcher: [

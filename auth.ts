@@ -47,43 +47,33 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           id: admin.id,
           email: admin.email,
           name: admin.name,
+          role: admin.role, // Explicitly return role from database
         };
       },
     }),
   ],
   callbacks: {
     async jwt({ token, user }) {
+      // When user logs in, add user data to token
       if (user) {
         token.id = user.id;
         token.email = user.email;
         token.name = user.name;
+        token.role = (user as any).role;
       }
+      // On subsequent requests, token.role should already be set
+      // but ensure it's always present
       return token;
     },
     async session({ session, token }) {
-      if (token) {
+      if (session.user) {
         session.user.id = token.id as string;
         session.user.email = token.email as string;
         session.user.name = token.name as string;
+        // CRITICAL: Always ensure role is set from token
+        (session.user as any).role = token.role || "ADMIN";
       }
       return session;
-    },
-    async authorized({ auth, request: { nextUrl } }) {
-      const isLoggedIn = !!auth?.user;
-      const isOnLogin = nextUrl.pathname === "/login";
-
-      if (isOnLogin) {
-        if (isLoggedIn) {
-          return Response.redirect(new URL("/dashboard", nextUrl));
-        }
-        return true;
-      }
-
-      if (!isLoggedIn) {
-        return Response.redirect(new URL("/login", nextUrl));
-      }
-
-      return true;
     },
   },
 });

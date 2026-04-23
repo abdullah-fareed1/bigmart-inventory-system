@@ -23,9 +23,26 @@ async function main() {
       email: "admin@bigmart.lk",
       password: hashedPassword,
       name: "Admin User",
+      role: "ADMIN",
     },
   });
   console.log("✅ Admin created (admin@bigmart.lk / admin123)");
+
+  // ==========================================
+  // 1.5. CREATE CASHIER USER
+  // ==========================================
+  const cashierPassword = await bcrypt.hash("cashier123", 10);
+  await prisma.admin.upsert({
+    where: { email: "cashier@bigmart.lk" },
+    update: {},
+    create: {
+      email: "cashier@bigmart.lk",
+      password: cashierPassword,
+      name: "Cashier User",
+      role: "CASHIER",
+    },
+  });
+  console.log("✅ Cashier created (cashier@bigmart.lk / cashier123)");
 
   // ==========================================
   // 2. CREATE SHOP SETTINGS

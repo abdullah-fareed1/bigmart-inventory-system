@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { Sidebar } from "@/components/layout/sidebar";
+import { SidebarWrapper } from "@/components/layout/sidebar-wrapper";
 import { Header } from "@/components/layout/header";
 
 export default async function DashboardLayout({
@@ -14,11 +14,14 @@ export default async function DashboardLayout({
     redirect("/login");
   }
 
+  const userRole = (session.user as any).role || "ADMIN";
+  const userName = session.user.name || "";
+
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar />
+      <SidebarWrapper initialRole={userRole} />
       <div className="flex flex-1 flex-col overflow-hidden">
-        <Header />
+        <Header initialName={userName} initialRole={userRole} />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
     </div>

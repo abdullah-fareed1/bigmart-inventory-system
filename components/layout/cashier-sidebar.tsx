@@ -1,20 +1,14 @@
-// src/components/layout/sidebar.tsx
+// src/components/layout/cashier-sidebar.tsx
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSession, signOut } from "next-auth/react";
+import { signOut } from "next-auth/react";
 import {
   LayoutDashboard,
   ShoppingCart,
-  Package,
-  Warehouse,
-  FileText,
-  Truck,
-  Users,
   Receipt,
-  Settings,
   ChevronLeft,
   ChevronRight,
   LogOut,
@@ -29,29 +23,17 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ThemeToggle } from "./theme-toggle";
-import { getAllowedModules } from "@/lib/permissions";
 
-const allNavItems = [
+// Cashier-only navigation items
+const cashierNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", module: "dashboard" },
   { icon: ShoppingCart, label: "Point of Sale", href: "/pos", module: "pos" },
-  { icon: Package, label: "Products", href: "/products", module: "products" },
-  { icon: Warehouse, label: "Stocks", href: "/stocks", module: "stocks" },
-  { icon: FileText, label: "Supplier Bills", href: "/supplier-bills", module: "supplier-bills" },
-  { icon: Truck, label: "Suppliers", href: "/suppliers", module: "suppliers" },
-  { icon: Users, label: "Customers", href: "/customers", module: "customers" },
   { icon: Receipt, label: "Transactions", href: "/transactions", module: "transactions" },
-  { icon: Settings, label: "Settings", href: "/settings", module: "settings" },
 ];
 
-export function Sidebar() {
+export function CashierSidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const pathname = usePathname();
-  const { data: session } = useSession();
-
-  // Get user role and filter nav items - default to ADMIN for backward compatibility
-  const userRole = (session?.user as any)?.role || "ADMIN";
-  const allowedModules = getAllowedModules(userRole);
-  const navItems = allNavItems.filter((item) => allowedModules.includes(item.module));
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -85,7 +67,7 @@ export function Sidebar() {
         {/* Navigation */}
         <ScrollArea className="flex-1 py-4">
           <nav className="flex flex-col gap-1 px-2">
-            {navItems.map((item) => {
+            {cashierNavItems.map((item) => {
               const isActive =
                 pathname === item.href ||
                 (item.href !== "/dashboard" &&
