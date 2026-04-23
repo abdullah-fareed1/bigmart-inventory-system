@@ -59,6 +59,17 @@ const UNIT_LABELS: Record<string, string> = {
   KILOGRAMS: "Kilograms",
   PACKETS: "Packets",
   PIECES: "Pieces",
+  ROLLS: "Rolls",
+  INCHES: "Inches",
+  FEET: "Feet",
+  CENTIMETERS: "Centimeters",
+  MILLIMETERS: "Millimeters",
+  DOZENS: "Dozens",
+  SETS: "Sets",
+  PAIRS: "Pairs",
+  CONES: "Cones",
+  BOXES: "Boxes",
+  BUNDLES: "Bundles",
 };
 
 export function ProductForm({ categories, initialData }: ProductFormProps) {

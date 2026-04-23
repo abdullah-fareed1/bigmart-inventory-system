@@ -69,6 +69,17 @@ const MEASURING_UNITS = [
   "KILOGRAMS",
   "PACKETS",
   "PIECES",
+  "ROLLS",
+  "INCHES",
+  "FEET",
+  "CENTIMETERS",
+  "MILLIMETERS",
+  "DOZENS",
+  "SETS",
+  "PAIRS",
+  "CONES",
+  "BOXES",
+  "BUNDLES",
 ];
 
 // ─── Component ───────────────────────────────────────────────────
