@@ -22,7 +22,7 @@ export const productSchema = z.object({
     primaryUnit: z.enum(MEASURING_UNITS, {
         error: "Please select a valid unit",
     }),
-    imageUrl: z.string().url().optional().nullable(),
+    imageUrl: z.string().trim().url().optional().or(z.literal("")).nullable(),
 });
 
 export type ProductFormData = z.infer<typeof productSchema>;
