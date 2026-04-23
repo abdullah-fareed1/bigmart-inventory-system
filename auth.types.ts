@@ -14,12 +14,3 @@ declare module "next-auth" {
     role: "ADMIN" | "CASHIER";
   }
 }
-
-declare module "next-auth/jwt" {
-  interface JWT {
-    id: string;
-    email: string;
-    name: string;
-    role: "ADMIN" | "CASHIER";
-  }
-}

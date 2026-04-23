@@ -3,7 +3,7 @@ import { Session } from "next-auth";
 export type UserRole = "ADMIN" | "CASHIER";
 
 // Define allowed modules for each role
-const ROLE_MODULES = {
+const ROLE_MODULES: Record<UserRole, string[]> = {
   ADMIN: [
     "dashboard",
     "pos",
@@ -16,7 +16,7 @@ const ROLE_MODULES = {
     "settings",
   ],
   CASHIER: ["dashboard", "pos", "transactions"],
-} as const;
+};
 
 // Route to module mapping for middleware
 const ROUTE_TO_MODULE: Record<string, string> = {
