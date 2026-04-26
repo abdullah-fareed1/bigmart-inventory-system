@@ -34,6 +34,7 @@ interface ShopSettings {
   phone: string;
   email: string | null;
   logoUrl: string | null;
+  returnPolicyDays: number;
 }
 
 interface ShopInfoSectionProps {
@@ -49,6 +50,7 @@ export function ShopInfoSection({ settings }: ShopInfoSectionProps) {
     phone: settings.phone,
     email: settings.email || "",
     logoUrl: settings.logoUrl || "",
+    returnPolicyDays: settings.returnPolicyDays || 7,
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -127,6 +129,10 @@ export function ShopInfoSection({ settings }: ShopInfoSectionProps) {
                   <span>{settings.email}</span>
                 </div>
               )}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <span className="font-medium">Return Policy:</span>
+                <span>{settings.returnPolicyDays} days</span>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -213,6 +219,27 @@ export function ShopInfoSection({ settings }: ShopInfoSectionProps) {
                   }
                   placeholder="shop@example.com"
                 />
+              </div>
+
+              {/* Return Policy Days */}
+              <div className="space-y-2">
+                <Label htmlFor="returnPolicyDays">Return Policy Days *</Label>
+                <Input
+                  id="returnPolicyDays"
+                  type="number"
+                  min="1"
+                  value={formData.returnPolicyDays}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      returnPolicyDays: parseInt(e.target.value) || 7,
+                    }))
+                  }
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  Number of days customers have to return items
+                </p>
               </div>
             </div>
 

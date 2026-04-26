@@ -21,14 +21,15 @@ model Admin {
 }
 
 model ShopSettings {
-  id        String   @id @default(cuid())
-  shopName  String
-  address   String
-  phone     String
-  email     String?
-  logoUrl   String?
-  updatedAt DateTime @updatedAt
-  createdAt DateTime @default(now())
+  id                 String   @id @default(cuid())
+  shopName           String
+  address            String
+  phone              String
+  email              String?
+  logoUrl            String?
+  returnPolicyDays   Int      @default(7)
+  updatedAt          DateTime @updatedAt
+  createdAt          DateTime @default(now())
 }
 
 model Customer {

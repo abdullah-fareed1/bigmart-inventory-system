@@ -27,6 +27,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { AlertTriangle, Loader2, RotateCcw, Package } from "lucide-react";
 import { createRefund, getAlreadyRefundedQty } from "@/actions/refunds";
+import { getShopSettings } from "@/actions/settings";
 import { printRefundReceipt } from "@/components/receipts/refund-receipt";
 import { formatCurrency, formatQuantity } from "@/lib/format";
 import { toast } from "sonner";
@@ -96,15 +97,26 @@ export function RefundDialog({
     {}
   );
   const [isLoadingRefunded, setIsLoadingRefunded] = useState(true);
+  const [returnPolicyDays, setReturnPolicyDays] = useState(7);
 
-  const isOver14Days = daysSince(transaction.saleDateTime) > 14;
+  const isOverPolicyDays = daysSince(transaction.saleDateTime) > returnPolicyDays;
 
-  // ── Load already-refunded quantities ────────────────────────────────────
+  // ── Load already-refunded quantities and return policy days ──────────────
   useEffect(() => {
     if (!open) return;
     setIsLoadingRefunded(true);
-    getAlreadyRefundedQty(transaction.id).then((result) => {
-      const refundedMap = result.data ?? {};
+    
+    Promise.all([
+      getAlreadyRefundedQty(transaction.id),
+      getShopSettings(),
+    ]).then(([refundResult, settingsResult]) => {
+      // Set return policy days
+      if (settingsResult.success && settingsResult.data) {
+        setReturnPolicyDays(settingsResult.data.returnPolicyDays || 7);
+      }
+      
+      // Set refunded quantities
+      const refundedMap = refundResult.data ?? {};
       const initial: Record<string, ItemRefundState> = {};
 
       for (const item of transaction.items) {
@@ -203,6 +215,10 @@ export function RefundDialog({
 
       toast.success(`Refund ${result.refundNumber} created successfully`);
 
+      // Get shop settings
+      const shopSettingsResult = await getShopSettings();
+      const shopSettings = shopSettingsResult.success ? shopSettingsResult.data : null;
+
       // Print receipt
       printRefundReceipt({
         refundReceiptNumber: result.data.refundReceiptNumber,
@@ -234,6 +250,9 @@ export function RefundDialog({
         ),
         totalRefundAmount: result.data.totalRefundAmount,
         pointsDeducted: result.data.pointsDeducted,
+        shopName: shopSettings?.shopName,
+        shopAddress: shopSettings?.address,
+        shopPhone: shopSettings?.phone,
       });
 
       onOpenChange(false);
@@ -259,11 +278,11 @@ export function RefundDialog({
         </DialogHeader>
 
         {/* 14-day warning */}
-        {isOver14Days && (
+        {isOverPolicyDays && (
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              This sale is over 14 days old. The standard return policy has
+              This sale is over {returnPolicyDays} days old. The standard return policy has
               expired. Proceed only with manager approval.
             </AlertDescription>
           </Alert>

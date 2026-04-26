@@ -15,6 +15,7 @@ const shopSettingsSchema = z.object({
   phone: z.string().regex(/^0[0-9]{9}$/, "Invalid phone number"),
   email: z.string().email("Invalid email").optional().or(z.literal("")),
   logoUrl: z.string().url("Invalid URL").optional().or(z.literal("")),
+  returnPolicyDays: z.number().int().min(1, "Return policy days must be at least 1").default(7),
 });
 
 // ============================================
@@ -52,6 +53,7 @@ export async function updateShopSettings(data: {
   phone: string;
   email?: string;
   logoUrl?: string;
+  returnPolicyDays?: number;
 }) {
   try {
     // Validate
@@ -66,6 +68,7 @@ export async function updateShopSettings(data: {
         phone: validated.phone,
         email: validated.email || null,
         logoUrl: validated.logoUrl || null,
+        returnPolicyDays: validated.returnPolicyDays,
       },
       create: {
         id: "shop-settings",
@@ -74,6 +77,7 @@ export async function updateShopSettings(data: {
         phone: validated.phone,
         email: validated.email || null,
         logoUrl: validated.logoUrl || null,
+        returnPolicyDays: validated.returnPolicyDays,
       },
     });
     

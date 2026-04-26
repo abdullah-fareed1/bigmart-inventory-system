@@ -33,6 +33,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { getTransactionById } from "@/actions/transactions";
+import { getShopSettings } from "@/actions/settings";
 import { printSaleReceipt } from "@/components/receipts/sale-receipt";
 import { printRefundReceipt } from "@/components/receipts/refund-receipt";
 import { RefundDialog } from "@/components/refunds/refund-dialog";
@@ -70,17 +71,29 @@ export default function TransactionDetailPage() {
   const [transaction, setTransaction] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showRefundDialog, setShowRefundDialog] = useState(false);
+  const [returnPolicyDays, setReturnPolicyDays] = useState(7);
 
   const fetchTransaction = useCallback(async () => {
     setIsLoading(true);
-    const result = await getTransactionById(id);
-    if (result.success && result.data) {
-      setTransaction(result.data);
-    } else {
-      toast.error("Transaction not found");
-      router.push("/transactions");
+    try {
+      const [transactionResult, settingsResult] = await Promise.all([
+        getTransactionById(id),
+        getShopSettings(),
+      ]);
+      
+      if (transactionResult.success && transactionResult.data) {
+        setTransaction(transactionResult.data);
+      } else {
+        toast.error("Transaction not found");
+        router.push("/transactions");
+      }
+      
+      if (settingsResult.success && settingsResult.data) {
+        setReturnPolicyDays(settingsResult.data.returnPolicyDays || 7);
+      }
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   }, [id, router]);
 
   useEffect(() => {
@@ -88,8 +101,12 @@ export default function TransactionDetailPage() {
   }, [fetchTransaction]);
 
   // ── Print original receipt ───────────────────────────────────────────────
-  const handlePrint = () => {
+  const handlePrint = async () => {
     if (!transaction) return;
+
+    const shopSettingsResult = await getShopSettings();
+    const shopSettings = shopSettingsResult.success ? shopSettingsResult.data : null;
+
     printSaleReceipt({
       receiptNumber: transaction.receiptNumber,
       saleDateTime: transaction.saleDateTime,
@@ -113,11 +130,18 @@ export default function TransactionDetailPage() {
       amountPaid: transaction.amountPaid ?? transaction.totalAmount,
       changeGiven: transaction.changeGiven ?? 0,
       pointsEarned: transaction.pointsEarned,
+      returnPolicyDays: shopSettings?.returnPolicyDays,
+      shopName: shopSettings?.shopName,
+      shopAddress: shopSettings?.address,
+      shopPhone: shopSettings?.phone,
     });
   };
 
   // ── Print refund receipt ─────────────────────────────────────────────────
-  const handlePrintRefund = (refund: any) => {
+  const handlePrintRefund = async (refund: any) => {
+    const shopSettingsResult = await getShopSettings();
+    const shopSettings = shopSettingsResult.success ? shopSettingsResult.data : null;
+
     printRefundReceipt({
       refundReceiptNumber: refund.refundReceiptNumber,
       originalReceiptNumber: transaction.receiptNumber,
@@ -139,6 +163,9 @@ export default function TransactionDetailPage() {
       }),
       totalRefundAmount: refund.totalRefundAmount,
       pointsDeducted: refund.pointsDeducted,
+      shopName: shopSettings?.shopName,
+      shopAddress: shopSettings?.address,
+      shopPhone: shopSettings?.phone,
     });
   };
 
@@ -148,7 +175,7 @@ export default function TransactionDetailPage() {
     0
   ) ?? 0;
   const isFullyRefunded = totalRefunded >= (transaction?.totalAmount ?? 0) - 0.01;
-  const over14Days = transaction ? daysSince(transaction.saleDateTime) > 14 : false;
+  const overPolicyDays = transaction ? daysSince(transaction.saleDateTime) > returnPolicyDays : false;
 
   // ── Skeleton ─────────────────────────────────────────────────────────────
   if (isLoading || !transaction) {
@@ -211,10 +238,10 @@ export default function TransactionDetailPage() {
       </div>
 
       {/* 14-day warning banner */}
-      {over14Days && !isFullyRefunded && (
+      {overPolicyDays && !isFullyRefunded && (
         <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
           <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-          This transaction is over 14 days old. The standard return policy has expired.
+          This transaction is over {returnPolicyDays} days old. The standard return policy has expired.
         </div>
       )}
 

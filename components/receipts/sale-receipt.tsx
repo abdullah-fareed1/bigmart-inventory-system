@@ -28,12 +28,14 @@ interface SaleReceiptData {
   amountPaid: number;
   changeGiven: number;
   pointsEarned: number;
+  returnPolicyDays?: number;
   shopName?: string;
   shopAddress?: string;
   shopPhone?: string;
 }
 
 export function SaleReceipt({ data }: { data: SaleReceiptData }) {
+  const returnDays = data.returnPolicyDays || 7;
   return (
     <div
       id="sale-receipt"
@@ -258,7 +260,7 @@ export function SaleReceipt({ data }: { data: SaleReceiptData }) {
       >
         <div>Thank you for shopping with us!</div>
         <div style={{ marginTop: "2px" }}>
-          Exchange within 14 days with receipt
+          Exchange within {returnDays} days with receipt
         </div>
       </div>
     </div>
@@ -372,7 +374,7 @@ export function printSaleReceipt(data: SaleReceiptData) {
   <div class="divider" style="margin-top:6px"></div>
   <div class="center" style="font-size:10px">
     <div>Thank you for shopping with us!</div>
-    <div style="margin-top:2px">Exchange within 14 days with receipt</div>
+    <div style="margin-top:2px">Exchange within ${data.returnPolicyDays || 7} days with receipt</div>
   </div>
   <script>window.onload = function() { window.print(); }</script>
 </body>

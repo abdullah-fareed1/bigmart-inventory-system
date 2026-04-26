@@ -57,6 +57,7 @@ import {
   type StockDetail,
 } from "@/actions/stocks";
 import { getAvailableCredit } from "@/actions/credit-notes";
+import { getShopSettings } from "@/actions/settings";
 import { formatCurrency, formatDateTime, formatQuantity } from "@/lib/format";
 import { printGRN } from "@/components/receipts/grn-receipt";
 import { printSupplierReturn } from "@/components/receipts/supplier-return-receipt";
@@ -241,17 +242,23 @@ export default function StockDetailPage() {
   };
 
   // ── Print GRN ───────────────────────────────────────────────
-  const handlePrintGRN = () => {
+  const handlePrintGRN = async () => {
     if (!stock) return;
-    const shopSettings = { shopName: "Bigmart Textiles", address: "123 Main Street, Colombo 07", phone: "0112345678" };
-    printGRN(stock, shopSettings);
+    const shopSettingsResult = await getShopSettings();
+    const shopSettings = shopSettingsResult.success ? shopSettingsResult.data : null;
+    printGRN(stock, {
+      shopName: shopSettings?.shopName || "Shop",
+      address: shopSettings?.address || "",
+      phone: shopSettings?.phone || "",
+    });
   };
 
   // ── Print Supplier Return ───────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handlePrintReturn = (ret: any) => {
+  const handlePrintReturn = async (ret: any) => {
     if (!stock) return;
-    const shopSettings = { shopName: "Bigmart Textiles", address: "123 Main Street, Colombo 07", phone: "0112345678" };
+    const shopSettingsResult = await getShopSettings();
+    const shopSettings = shopSettingsResult.success ? shopSettingsResult.data : null;
     printSupplierReturn(
       {
         returnNumber: ret.returnNumber,
@@ -270,7 +277,11 @@ export default function StockDetailPage() {
         },
         creditNote: ret.creditNote,
       },
-      shopSettings
+      {
+        shopName: shopSettings?.shopName || "Shop",
+        address: shopSettings?.address || "",
+        phone: shopSettings?.phone || "",
+      }
     );
   };
 

@@ -11,6 +11,7 @@ import { Cart } from "@/components/pos/cart";
 import { CheckoutDialog } from "@/components/pos/checkout-dialog";
 import { CartDiscountDialog } from "@/components/pos/discount-dialog";
 import { getTransactionById } from "@/actions/transactions";
+import { getShopSettings } from "@/actions/settings";
 import { printSaleReceipt } from "@/components/receipts/sale-receipt";
 import { toast } from "sonner";
 import {
@@ -119,6 +120,9 @@ export default function POSPage() {
       return;
     }
 
+    const shopSettingsResult = await getShopSettings();
+    const shopSettings = shopSettingsResult.success ? shopSettingsResult.data : null;
+
     const tx = result.data;
     printSaleReceipt({
       receiptNumber: tx.receiptNumber,
@@ -152,6 +156,10 @@ export default function POSPage() {
       amountPaid: tx.amountPaid ?? tx.totalAmount,
       changeGiven: tx.changeGiven ?? 0,
       pointsEarned: tx.pointsEarned,
+      returnPolicyDays: shopSettings?.returnPolicyDays,
+      shopName: shopSettings?.shopName,
+      shopAddress: shopSettings?.address,
+      shopPhone: shopSettings?.phone,
     });
   }, [lastSale]);
 
