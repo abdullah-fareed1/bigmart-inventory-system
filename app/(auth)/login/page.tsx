@@ -2,8 +2,9 @@
 
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { signInAction } from "@/actions/auth";
+import { getShopSettings } from "@/actions/settings";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +20,15 @@ import { Loader2, Scissors } from "lucide-react";
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [shopName, setShopName] = useState("Smart Inventory");
+
+  useEffect(() => {
+    getShopSettings().then((result) => {
+      if (result.success && result.data?.shopName) {
+        setShopName(result.data.shopName);
+      }
+    });
+  }, []);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,7 +60,7 @@ export default function LoginPage() {
             <Scissors className="h-6 w-6 text-zinc-50 dark:text-zinc-950" />
           </div>
           <h1 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50">
-            Big Mart Textiles
+            {shopName}
           </h1>
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
             Inventory Management & Point of Sale System
