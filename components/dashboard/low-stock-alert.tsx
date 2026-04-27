@@ -12,6 +12,7 @@ interface LowStockAlertProps {
     supplierName: string;
     remaining: number;
     unit: string;
+    minStockAlert: number;
   }[];
   threshold?: number;
   isLoading?: boolean;
@@ -45,7 +46,7 @@ export function LowStockAlert({
           </div>
         ) : items.length === 0 ? (
           <p className="py-8 text-center text-sm text-muted-foreground">
-            All stocks are above {threshold} units
+            All stocks are above their minimum alert levels
           </p>
         ) : (
           <div className="space-y-2">
@@ -59,12 +60,12 @@ export function LowStockAlert({
                   <div>
                     <p className="text-sm font-medium">{item.productName}</p>
                     <p className="text-xs text-muted-foreground">
-                      {item.supplierName}
+                      {item.supplierName} • Min: {item.minStockAlert} {item.unit}
                     </p>
                   </div>
                 </div>
                 <Badge
-                  variant={item.remaining <= 5 ? "destructive" : "secondary"}
+                  variant={item.remaining <= item.minStockAlert / 2 ? "destructive" : "secondary"}
                   className="text-xs"
                 >
                   {item.remaining.toFixed(2)} {item.unit}

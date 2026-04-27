@@ -272,25 +272,35 @@ export async function getTopProducts(limit: number = 5) {
 }
 
 export async function getLowStockItems(threshold: number = 10) {
-  const stocks = await prisma.stock.findMany({
-    where: {
-      isActive: true,
-      deletedAt: null,
-      quantityRemaining: { lt: threshold },
-    },
-    include: {
-      product: { select: { name: true } },
-      supplier: { select: { name: true } },
-    },
-    orderBy: { quantityRemaining: "asc" },
-    take: 10,
-  });
+  try {
+    const stocks = await prisma.stock.findMany({
+      where: {
+        isActive: true,
+        deletedAt: null,
+      },
+      include: {
+        product: true,
+        supplier: true,
+      },
+      orderBy: { quantityRemaining: "asc" },
+    });
 
-  return stocks.map((stock) => ({
-    id: stock.id,
-    productName: stock.product.name,
-    supplierName: stock.supplier.name,
-    remaining: Number(stock.quantityRemaining),
-    unit: stock.measuringUnit,
-  }));
+    // Filter stocks where quantityRemaining is below the product's minStockAlert (or default 5)
+    const lowStocks = stocks.filter((stock) => {
+      const alertThreshold = stock.product.minStockAlert ?? 5;
+      return Number(stock.quantityRemaining) < alertThreshold;
+    });
+
+    return lowStocks.slice(0, 10).map((stock) => ({
+      id: stock.id,
+      productName: stock.product.name,
+      supplierName: stock.supplier.name,
+      remaining: Number(stock.quantityRemaining),
+      unit: stock.measuringUnit,
+      minStockAlert: stock.product.minStockAlert ?? 5,
+    }));
+  } catch (error) {
+    console.error("Failed to fetch low stock items:", error);
+    return [];
+  }
 }

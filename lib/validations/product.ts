@@ -34,6 +34,13 @@ export const productSchema = z.object({
         error: "Please select a valid unit",
     }),
     imageUrl: z.string().trim().url().optional().or(z.literal("")).nullable(),
+    minStockAlert: z
+        .number()
+        .int("Minimum stock alert must be a whole number")
+        .min(1, "Minimum stock alert must be at least 1")
+        .max(10000, "Minimum stock alert must be at most 10000")
+        .optional()
+        .nullable(),
 });
 
 export type ProductFormData = z.infer<typeof productSchema>;

@@ -49,6 +49,7 @@ interface ProductFormProps {
     categoryId: string;
     primaryUnit: string;
     imageUrl: string | null;
+    minStockAlert: number | null;
   };
 }
 
@@ -85,6 +86,7 @@ export function ProductForm({ categories, initialData }: ProductFormProps) {
       categoryId: initialData?.categoryId ?? "",
       primaryUnit: (initialData?.primaryUnit as ProductFormData["primaryUnit"]) ?? undefined,
       imageUrl: initialData?.imageUrl ?? "",
+      minStockAlert: initialData?.minStockAlert ?? 5,
     },
   });
 
@@ -217,7 +219,7 @@ export function ProductForm({ categories, initialData }: ProductFormProps) {
             </Card>
           </div>
 
-          {/* Right Column: Image */}
+          {/* Right Column: Image & Settings */}
           <div className="space-y-6">
             <Card>
               <CardHeader>
@@ -236,6 +238,42 @@ export function ProductForm({ categories, initialData }: ProductFormProps) {
                           onRemove={() => field.onChange("")}
                         />
                       </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Stock Alert</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <FormField
+                  control={form.control}
+                  name="minStockAlert"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Minimum Stock Alert</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          placeholder="Default: 5"
+                          {...field}
+                          value={field.value ?? ""}
+                          onChange={(e) =>
+                            field.onChange(
+                              e.target.value ? parseInt(e.target.value) : null
+                            )
+                          }
+                          min="1"
+                          max="10000"
+                        />
+                      </FormControl>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Alert when stock falls below this level
+                      </p>
                       <FormMessage />
                     </FormItem>
                   )}

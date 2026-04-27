@@ -36,6 +36,7 @@ interface ProductDetail {
   imageUrl: string | null;
   categoryId: string;
   primaryUnit: string;
+  minStockAlert: number | null;
   isActive: boolean;
   createdAt: string;
   category: Category;
@@ -128,6 +129,7 @@ export default function ProductDetailPage() {
                   categoryId: product.categoryId,
                   primaryUnit: product.primaryUnit,
                   imageUrl: product.imageUrl,
+                  minStockAlert: product.minStockAlert,
                 }
               : undefined
           }

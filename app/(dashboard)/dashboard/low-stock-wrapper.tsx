@@ -9,6 +9,7 @@ interface LowStockWrapperProps {
     supplierName: string;
     remaining: number;
     unit: string;
+    minStockAlert: number;
   }[];
 }
 

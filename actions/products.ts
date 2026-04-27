@@ -120,6 +120,7 @@ export async function createProduct(formData: {
   categoryId: string;
   primaryUnit: string;
   imageUrl?: string | null;
+  minStockAlert?: number | null;
 }) {
   try {
     const validated = productSchema.parse(formData);
@@ -141,6 +142,7 @@ export async function createProduct(formData: {
           categoryId: validated.categoryId,
           primaryUnit: validated.primaryUnit,
           imageUrl: validated.imageUrl ?? null,
+          minStockAlert: validated.minStockAlert ?? 5,
         },
         include: { category: true },
       });
@@ -184,6 +186,7 @@ export async function updateProduct(
     categoryId?: string;
     primaryUnit?: string;
     imageUrl?: string | null;
+    minStockAlert?: number | null;
     isActive?: boolean;
   }
 ) {
@@ -218,6 +221,9 @@ export async function updateProduct(
           primaryUnit: formData.primaryUnit,
         }),
         ...(formData.imageUrl !== undefined && { imageUrl: formData.imageUrl }),
+        ...(formData.minStockAlert !== undefined && {
+          minStockAlert: formData.minStockAlert ?? 5,
+        }),
         ...(formData.isActive !== undefined && { isActive: formData.isActive }),
       },
       include: { category: true },

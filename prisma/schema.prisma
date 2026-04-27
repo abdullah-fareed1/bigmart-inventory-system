@@ -97,17 +97,18 @@ model Category {
 }
 
 model Product {
-  id          String    @id @default(cuid())
-  name        String
-  description String?   @db.Text
-  imageUrl    String?
-  categoryId  String
-  category    Category  @relation(fields: [categoryId], references: [id])
-  primaryUnit String
-  isActive    Boolean   @default(true)
-  deletedAt   DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id              String    @id @default(cuid())
+  name            String
+  description     String?   @db.Text
+  imageUrl        String?
+  categoryId      String
+  category        Category  @relation(fields: [categoryId], references: [id])
+  primaryUnit     String
+  minStockAlert   Int?      @default(5)
+  isActive        Boolean   @default(true)
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   stocks           Stock[]
   unitConversions  ProductUnitConversion[]
