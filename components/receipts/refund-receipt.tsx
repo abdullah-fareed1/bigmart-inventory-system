@@ -57,9 +57,9 @@ export function RefundReceipt({
   items,
   totalRefundAmount,
   pointsDeducted,
-  shopName = "Bigmart Textiles",
-  shopAddress = "Main Street, Colombo",
-  shopPhone = "011-1234567",
+  shopName = "Smart Inventory",
+  shopAddress = "Enter your address",
+  shopPhone = "0000000000",
 }: RefundReceiptProps) {
   return (
     <div
@@ -187,9 +187,9 @@ export function printRefundReceipt(props: RefundReceiptProps) {
     items,
     totalRefundAmount,
     pointsDeducted,
-    shopName = "Bigmart Textiles",
-    shopAddress = "Main Street, Colombo",
-    shopPhone = "011-1234567",
+    shopName = "Smart Inventory",
+    shopAddress = "Enter your address",
+    shopPhone = "0000000000",
   } = props;
 
   function fmtDate(d: string | Date): string {

@@ -83,7 +83,7 @@ export default function LoginPage() {
                   id="email"
                   name="email"
                   type="email"
-                  placeholder="admin@bigmart.lk"
+                  placeholder="cashier@example.com"
                   required
                   autoComplete="email"
                   autoFocus
@@ -129,7 +129,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-xs text-zinc-400 dark:text-zinc-600 mt-6">
-          Textile POS v1.3 &copy; {new Date().getFullYear()}
+          Smart Inventory & POS system v2.1 &copy; {new Date().getFullYear()}
         </p>
       </div>
     </div>

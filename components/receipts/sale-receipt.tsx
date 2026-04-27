@@ -52,7 +52,7 @@ export function SaleReceipt({ data }: { data: SaleReceiptData }) {
       {/* Header */}
       <div style={{ textAlign: "center", marginBottom: "8px" }}>
         <div style={{ fontSize: "16px", fontWeight: "bold" }}>
-          {data.shopName || "Bigmart Textiles"}
+          {data.shopName || "Smart Inventory"}
         </div>
         {data.shopAddress && (
           <div style={{ fontSize: "10px" }}>{data.shopAddress}</div>
@@ -337,7 +337,7 @@ export function printSaleReceipt(data: SaleReceiptData) {
 </head>
 <body>
   <div class="center">
-    <div style="font-size:16px;font-weight:bold">${data.shopName || "Bigmart Textiles"}</div>
+    <div style="font-size:16px;font-weight:bold">${data.shopName || "Smart Inventory"}</div>
     ${data.shopAddress ? `<div style="font-size:10px">${data.shopAddress}</div>` : ""}
     ${data.shopPhone ? `<div style="font-size:10px">Tel: ${data.shopPhone}</div>` : ""}
   </div>

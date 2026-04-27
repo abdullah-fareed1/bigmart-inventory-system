@@ -1,7 +1,7 @@
 // src/components/layout/sidebar.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useSession, signOut } from "next-auth/react";
@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ThemeToggle } from "./theme-toggle";
 import { getAllowedModules } from "@/lib/permissions";
+import { getShopSettings } from "@/actions/settings";
 
 const allNavItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard", module: "dashboard" },
@@ -45,6 +46,7 @@ const allNavItems = [
 
 export function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [shopName, setShopName] = useState("Smart Inventory");
   const pathname = usePathname();
   const { data: session } = useSession();
 
@@ -52,6 +54,14 @@ export function Sidebar() {
   const userRole = (session?.user as any)?.role || "ADMIN";
   const allowedModules = getAllowedModules(userRole);
   const navItems = allNavItems.filter((item) => allowedModules.includes(item.module));
+
+  useEffect(() => {
+    getShopSettings().then((result) => {
+      if (result.success && result.data?.shopName) {
+        setShopName(result.data.shopName);
+      }
+    });
+  }, []);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -65,7 +75,7 @@ export function Sidebar() {
         <div className="flex h-16 items-center justify-between border-b px-4">
           {!isCollapsed && (
             <span className="text-lg font-semibold tracking-tight">
-              Bigmart Textiles
+              {shopName}
             </span>
           )}
           <Button

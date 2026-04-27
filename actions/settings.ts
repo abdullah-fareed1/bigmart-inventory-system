@@ -30,7 +30,7 @@ export async function getShopSettings() {
       settings = await prisma.shopSettings.create({
         data: {
           id: "shop-settings",
-          shopName: "My Textile Shop",
+          shopName: "Smart Inventory",
           address: "Enter your address",
           phone: "0000000000",
         },

@@ -1,7 +1,7 @@
 // src/components/layout/cashier-sidebar.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
@@ -23,6 +23,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { ThemeToggle } from "./theme-toggle";
+import { getShopSettings } from "@/actions/settings";
 
 // Cashier-only navigation items
 const cashierNavItems = [
@@ -33,7 +34,16 @@ const cashierNavItems = [
 
 export function CashierSidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [shopName, setShopName] = useState("Smart Inventory");
   const pathname = usePathname();
+
+  useEffect(() => {
+    getShopSettings().then((result) => {
+      if (result.success && result.data?.shopName) {
+        setShopName(result.data.shopName);
+      }
+    });
+  }, []);
 
   return (
     <TooltipProvider delayDuration={0}>
@@ -47,7 +57,7 @@ export function CashierSidebar() {
         <div className="flex h-16 items-center justify-between border-b px-4">
           {!isCollapsed && (
             <span className="text-lg font-semibold tracking-tight">
-              Bigmart Textiles
+              {shopName}
             </span>
           )}
           <Button

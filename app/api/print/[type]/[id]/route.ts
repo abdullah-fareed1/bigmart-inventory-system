@@ -52,9 +52,10 @@ export async function GET(
         amountPaid: Number(transaction.amountPaid ?? transaction.totalAmount),
         changeGiven: Number(transaction.changeGiven ?? 0),
         pointsEarned: transaction.pointsEarned,
-        shopName: shop?.shopName || "Bigmart Textiles",
+        shopName: shop?.shopName || "Smart Inventory",
         shopAddress: shop?.address || "",
         shopPhone: shop?.phone || "",
+        returnPolicyDays: shop?.returnPolicyDays || 7,
       };
 
       return NextResponse.json({ success: true, data });
