@@ -15,7 +15,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Loader2, Scissors } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { Logo } from "@/components/shared/logo";
 
 export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
@@ -56,12 +57,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm">
         {/* Logo / Brand */}
         <div className="flex flex-col items-center mb-8">
-          <div className="h-12 w-12 rounded-lg bg-zinc-950 dark:bg-zinc-50 flex items-center justify-center mb-4">
-            <Scissors className="h-6 w-6 text-zinc-50 dark:text-zinc-950" />
-          </div>
-          <h1 className="text-2xl font-bold text-zinc-950 dark:text-zinc-50">
-            {shopName}
-          </h1>
+          <Logo width={160} height={64} className="mb-4" />
           <p className="text-sm text-zinc-500 dark:text-zinc-400 mt-1">
             Inventory Management & Point of Sale System
           </p>

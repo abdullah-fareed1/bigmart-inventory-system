@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ThemeToggle } from "./theme-toggle";
 import { getShopSettings } from "@/actions/settings";
+import { Logo } from "@/components/shared/logo";
 
 // Cashier-only navigation items
 const cashierNavItems = [
@@ -56,9 +57,9 @@ export function CashierSidebar() {
         {/* Header */}
         <div className="flex h-16 items-center justify-between border-b px-4">
           {!isCollapsed && (
-            <span className="text-lg font-semibold tracking-tight">
-              {shopName}
-            </span>
+            <div className="h-12 w-32 relative">
+              <Logo fill className="h-12 w-32" />
+            </div>
           )}
           <Button
             variant="ghost"

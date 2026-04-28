@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/tooltip";
 import { ThemeToggle } from "./theme-toggle";
 import { getShopSettings } from "@/actions/settings";
+import { Logo } from "@/components/shared/logo";
 
 // Admin full navigation items
 const adminNavItems = [
@@ -68,9 +69,9 @@ export function AdminSidebar() {
         {/* Header */}
         <div className="flex h-16 items-center justify-between border-b px-4">
           {!isCollapsed && (
-            <span className="text-lg font-semibold tracking-tight">
-              {shopName}
-            </span>
+            <div className="h-12 w-32 relative">
+              <Logo fill className="h-12 w-32" />
+            </div>
           )}
           <Button
             variant="ghost"

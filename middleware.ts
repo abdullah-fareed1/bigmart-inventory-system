@@ -54,6 +54,21 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL("/dashboard", request.url));
     }
   } else if (!pathname.startsWith("/api") && !pathname.startsWith("/_next")) {
+    // Skip auth check for public assets (images, fonts, etc)
+    if (
+      pathname.endsWith(".png") ||
+      pathname.endsWith(".jpg") ||
+      pathname.endsWith(".jpeg") ||
+      pathname.endsWith(".gif") ||
+      pathname.endsWith(".webp") ||
+      pathname.endsWith(".svg") ||
+      pathname.endsWith(".woff") ||
+      pathname.endsWith(".woff2") ||
+      pathname.endsWith(".ttf") ||
+      pathname.endsWith(".eot")
+    ) {
+      return NextResponse.next();
+    }
     // For non-protected routes, still require authentication
     const session = await auth();
     if (!session?.user) {
