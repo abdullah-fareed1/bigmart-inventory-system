@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { searchProductsForPOS } from "@/actions/transactions";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatQuantity } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 interface SearchResult {
@@ -193,7 +193,7 @@ export function ProductSearch({ onSelect, searchRef }: ProductSearchProps) {
                         </span>
                         <span>•</span>
                         <span>
-                          Stock: {item.quantityRemaining} {item.measuringUnit}
+                          Stock: {formatQuantity(item.quantityRemaining, item.measuringUnit)}
                         </span>
                       </div>
                     </div>

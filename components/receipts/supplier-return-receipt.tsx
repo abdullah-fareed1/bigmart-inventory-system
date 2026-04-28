@@ -99,7 +99,7 @@ export function SupplierReturnReceipt({
 
       <div className="row">
         <span>Qty Returned:</span>
-        <span>{formatQuantity(r.quantityReturned)} {r.stock.measuringUnit}</span>
+        <span>{formatQuantity(r.quantityReturned, r.stock.measuringUnit)}</span>
       </div>
       <div className="row">
         <span>Unit Price:</span>
@@ -204,7 +204,7 @@ export function printSupplierReturn(
   <div class="bold">Product:</div>
   <div>${r.product.name}</div>
   <div class="divider"></div>
-  <div class="row"><span>Qty Returned:</span><span>${formatQuantity(r.quantityReturned)} ${r.stock.measuringUnit}</span></div>
+  <div class="row"><span>Qty Returned:</span><span>${formatQuantity(r.quantityReturned, r.stock.measuringUnit)}</span></div>
   <div class="row"><span>Unit Price:</span><span>${formatCurrency(r.stock.buyingPricePerUnit)}</span></div>
   <div class="row"><span>Reason:</span><span>${r.reason}</span></div>
   <div class="double-divider"></div>

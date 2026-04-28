@@ -327,14 +327,13 @@ export function RefundDialog({
                         {item.productName}
                       </label>
                       <div className="text-sm text-muted-foreground">
-                        {formatQuantity(item.quantity)} {item.measuringUnit} ×{" "}
+                        {formatQuantity(item.quantity, item.measuringUnit)} ×{" "}
                         {formatCurrency(item.pricePerUnit)} ={" "}
                         {formatCurrency(item.lineTotal)}
                       </div>
                       {state.alreadyRefunded > 0 && (
                         <Badge variant="secondary" className="mt-1 text-xs">
-                          {formatQuantity(state.alreadyRefunded)}{" "}
-                          {item.measuringUnit} already refunded
+                          {formatQuantity(state.alreadyRefunded, item.measuringUnit)} already refunded
                         </Badge>
                       )}
                       {fullyRefunded && (
@@ -357,8 +356,7 @@ export function RefundDialog({
                           <Label className="text-xs">
                             Quantity to Return{" "}
                             <span className="text-muted-foreground">
-                              (max {formatQuantity(state.availableQty)}{" "}
-                              {item.measuringUnit})
+                              (max {formatQuantity(state.availableQty, item.measuringUnit)})
                             </span>
                           </Label>
                           <div className="flex gap-1 mt-1">
@@ -488,8 +486,7 @@ export function RefundDialog({
                       className="flex justify-between text-sm"
                     >
                       <span>
-                        {item.productName} ({formatQuantity(qty)}{" "}
-                        {item.measuringUnit})
+                        {item.productName} ({formatQuantity(qty, item.measuringUnit)})
                       </span>
                       <span>{formatCurrency(amt)}</span>
                     </div>

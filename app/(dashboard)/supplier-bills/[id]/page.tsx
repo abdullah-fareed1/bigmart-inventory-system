@@ -14,7 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, ArrowLeft, Printer, CreditCard } from "lucide-react";
 import { toast } from "sonner";
-import { formatCurrency, formatDateTime, formatDate } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatDate, formatQuantity } from "@/lib/format";
 import { getSupplierBillById, recordBillPayment } from "@/actions/supplier-bills";
 import { getAvailableCredit } from "@/actions/credit-notes";
 import { printBillGRN } from "@/components/receipts/bill-grn-receipt";
@@ -276,8 +276,8 @@ export default function SupplierBillDetailPage({ params }: { params: Promise<{ i
                       {stock.grnNumber}
                     </TableCell>
                     <TableCell>{stock.product.name}</TableCell>
-                    <TableCell className="text-right">{stock.quantityAdded}</TableCell>
-                    <TableCell className="text-right">{stock.quantityRemaining}</TableCell>
+                    <TableCell className="text-right">{formatQuantity(stock.quantityAdded, stock.measuringUnit)}</TableCell>
+                    <TableCell className="text-right">{formatQuantity(stock.quantityRemaining, stock.measuringUnit)}</TableCell>
                     <TableCell>{stock.measuringUnit}</TableCell>
                     <TableCell className="text-right">{formatCurrency(stock.buyingPricePerUnit)}</TableCell>
                     <TableCell className="text-right">{formatCurrency(stock.sellingPricePerUnit)}</TableCell>

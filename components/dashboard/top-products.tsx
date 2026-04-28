@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatQuantity } from "@/lib/format";
 
 interface TopProductsProps {
   products: {
@@ -45,7 +45,7 @@ export function TopProducts({ products, isLoading }: TopProductsProps) {
                   <div>
                     <p className="text-sm font-medium">{product.name}</p>
                     <p className="text-xs text-muted-foreground">
-                      {product.quantity.toFixed(2)} {product.unit}
+                      {formatQuantity(product.quantity, product.unit)}
                     </p>
                   </div>
                 </div>

@@ -13,6 +13,7 @@ import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import { Pencil, ArrowLeft, Package } from "lucide-react";
 import Image from "next/image";
 import { format } from "date-fns";
+import { formatQuantity } from "@/lib/format";
 
 interface Category {
   id: string;
@@ -252,7 +253,7 @@ export default function ProductDetailPage() {
                       </div>
                       <div className="text-right">
                         <p className="font-medium">
-                          {stock.quantityRemaining} {stock.measuringUnit}
+                          {formatQuantity(stock.quantityRemaining, stock.measuringUnit)}
                         </p>
                         <p className="text-sm text-muted-foreground">
                           Rs.{" "}

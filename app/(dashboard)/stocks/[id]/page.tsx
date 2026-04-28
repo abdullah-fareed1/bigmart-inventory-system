@@ -359,9 +359,9 @@ export default function StockDetailPage() {
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">Supplier</span><span>{stock.supplier.name}</span></div>
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">Date Received</span><span>{formatDateTime(stock.suppliedDate)}</span></div>
             <Separator />
-            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Qty Added</span><span>{formatQuantity(stock.quantityAdded)} {stock.measuringUnit}</span></div>
-            {totalReturnedQty > 0 && (<div className="flex justify-between text-sm"><span className="text-muted-foreground">Qty Returned</span><span className="text-destructive">-{formatQuantity(totalReturnedQty)} {stock.measuringUnit}</span></div>)}
-            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Qty Remaining</span><span className={`font-medium ${remaining <= 0 ? "text-destructive" : remaining < 10 ? "text-amber-600" : ""}`}>{formatQuantity(remaining)} {stock.measuringUnit}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Qty Added</span><span>{formatQuantity(stock.quantityAdded, stock.measuringUnit)}</span></div>
+            {totalReturnedQty > 0 && (<div className="flex justify-between text-sm"><span className="text-muted-foreground">Qty Returned</span><span className="text-destructive">-{formatQuantity(totalReturnedQty, stock.measuringUnit)}</span></div>)}
+            <div className="flex justify-between text-sm"><span className="text-muted-foreground">Qty Remaining</span><span className={`font-medium ${remaining <= 0 ? "text-destructive" : remaining < 10 ? "text-amber-600" : ""}`}>{formatQuantity(remaining, stock.measuringUnit)}</span></div>
             <Separator />
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">Buying Price/Unit</span><span>{formatCurrency(buyingPrice)}</span></div>
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">Selling Price/Unit</span><span>{formatCurrency(stock.sellingPricePerUnit)}</span></div>
@@ -383,7 +383,7 @@ export default function StockDetailPage() {
             {totalReturnedQty > 0 && (
               <><Separator />
               <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Return Summary</div>
-              <div className="flex justify-between text-sm"><span className="text-muted-foreground">Qty Returned</span><span>{formatQuantity(totalReturnedQty)} {stock.measuringUnit}</span></div>
+              <div className="flex justify-between text-sm"><span className="text-muted-foreground">Qty Returned</span><span>{formatQuantity(totalReturnedQty, stock.measuringUnit)}</span></div>
               <div className="flex justify-between text-sm"><span className="text-muted-foreground">Refund Value</span><span>{formatCurrency(totalRefunded)}</span></div></>
             )}
           </CardContent>
@@ -456,7 +456,7 @@ export default function StockDetailPage() {
                     <TableCell className="font-mono text-sm">{ret.returnNumber}</TableCell>
                     <TableCell className="text-sm">{formatDateTime(ret.returnDate)}</TableCell>
                     <TableCell><Badge variant="secondary">{ret.reason}</Badge></TableCell>
-                    <TableCell className="text-right">{formatQuantity(ret.quantityReturned)} {stock.measuringUnit}</TableCell>
+                    <TableCell className="text-right">{formatQuantity(ret.quantityReturned, stock.measuringUnit)}</TableCell>
                     <TableCell className="text-right font-medium">{formatCurrency(ret.refundAmount)}</TableCell>
                     <TableCell><RefundMethodBadge method={ret.refundMethod} /></TableCell>
                     <TableCell>
@@ -592,13 +592,13 @@ export default function StockDetailPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Return to Supplier</DialogTitle>
-            <DialogDescription>Available: {formatQuantity(remaining)} {stock.measuringUnit} · {formatCurrency(buyingPrice)}/{stock.measuringUnit}</DialogDescription>
+            <DialogDescription>Available: {formatQuantity(remaining, stock.measuringUnit)} · {formatCurrency(buyingPrice)}/{stock.measuringUnit}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div>
               <Label>Quantity to Return *</Label>
               <Input type="number" step="0.01" min="0.01" max={remaining} placeholder="0.00" value={returnQuantity} onChange={(e) => setReturnQuantity(e.target.value)} />
-              <p className="text-xs text-muted-foreground mt-1">Max: {formatQuantity(remaining)} {stock.measuringUnit}</p>
+              <p className="text-xs text-muted-foreground mt-1">Max: {formatQuantity(remaining, stock.measuringUnit)}</p>
             </div>
             <div>
               <Label>Reason *</Label>
@@ -642,7 +642,7 @@ export default function StockDetailPage() {
                 <div className="text-xs font-medium text-muted-foreground uppercase">Refund Preview</div>
                 <div className="flex justify-between text-sm">
                   <span>Refund Amount</span>
-                  <span className="font-bold">{formatQuantity(returnQtyNum)} × {formatCurrency(buyingPrice)} = {formatCurrency(previewRefund)}</span>
+                  <span className="font-bold">{formatQuantity(returnQtyNum, stock.measuringUnit)} × {formatCurrency(buyingPrice)} = {formatCurrency(previewRefund)}</span>
                 </div>
                 {!isPaid && outstandingDebt > 0 && refundMethod === "DEBT_OFFSET" && (
                   <>

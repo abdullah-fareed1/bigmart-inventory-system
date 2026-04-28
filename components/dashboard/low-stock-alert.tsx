@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatQuantity } from "@/lib/format";
 
 interface LowStockAlertProps {
   items: {
@@ -68,7 +69,7 @@ export function LowStockAlert({
                   variant={item.remaining <= item.minStockAlert / 2 ? "destructive" : "secondary"}
                   className="text-xs"
                 >
-                  {item.remaining.toFixed(2)} {item.unit}
+                  {formatQuantity(item.remaining, item.unit)}
                 </Badge>
               </div>
             ))}

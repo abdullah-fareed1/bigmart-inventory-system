@@ -341,7 +341,7 @@ export default function StocksPage() {
                           isLow ? "text-amber-600 font-medium" : ""
                         }
                       >
-                        {formatQuantity(remaining)} {stock.measuringUnit}
+                        {formatQuantity(remaining, stock.measuringUnit)}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">

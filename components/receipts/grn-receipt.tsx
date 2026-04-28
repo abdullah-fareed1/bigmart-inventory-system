@@ -93,7 +93,7 @@ export function GRNReceipt({ stock, shopSettings }: GRNReceiptProps) {
       <div className="row">
         <span>Quantity:</span>
         <span>
-          {formatQuantity(stock.quantityAdded)} {stock.measuringUnit}
+          {formatQuantity(stock.quantityAdded, stock.measuringUnit)}
         </span>
       </div>
       <div className="row">
@@ -248,7 +248,7 @@ export function printGRN(
   <div class="bold">Product:</div>
   <div>${stock.product.name}</div>
   <div class="divider"></div>
-  <div class="row"><span>Quantity:</span><span>${formatQuantity(stock.quantityAdded)} ${stock.measuringUnit}</span></div>
+  <div class="row"><span>Quantity:</span><span>${formatQuantity(stock.quantityAdded, stock.measuringUnit)}</span></div>
   <div class="row"><span>Unit Price:</span><span>${formatCurrency(stock.buyingPricePerUnit)}</span></div>
   <div class="double-divider"></div>
   <div class="row bold"><span>Total Cost:</span><span>${formatCurrency(totalCost)}</span></div>

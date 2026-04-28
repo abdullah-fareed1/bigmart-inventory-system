@@ -295,9 +295,7 @@ export function StockForm({
   // Get supplier name for credit badge
   const selectedSupplier = suppliers.find((s) => s.id === watchedSupplierId);
 
-  // Helper to format quantity
-  const formatQuantity = (qty: number, unit: string) =>
-    `${qty.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}`;
+
 
   return (
     <Form {...form}>

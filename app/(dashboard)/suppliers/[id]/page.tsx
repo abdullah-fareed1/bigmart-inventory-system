@@ -237,7 +237,7 @@ export default function SupplierDetailPage() {
                       <TableCell className="font-mono text-sm">{s.grnNumber}</TableCell>
                       <TableCell>{s.product.name}</TableCell>
                       <TableCell className="text-right">
-                        {formatQuantity(s.quantityRemaining)} {s.measuringUnit}
+                        {formatQuantity(s.quantityRemaining, s.measuringUnit)}
                       </TableCell>
                       <TableCell className="text-right">{formatCurrency(s.totalCost)}</TableCell>
                       <TableCell>

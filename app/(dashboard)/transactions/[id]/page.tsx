@@ -402,7 +402,7 @@ export default function TransactionDetailPage() {
                     </div>
                   </TableCell>
                   <TableCell className="text-right">
-                    {formatQuantity(item.quantity)} {item.measuringUnit}
+                    {formatQuantity(item.quantity, item.measuringUnit)}
                   </TableCell>
                   <TableCell className="text-right">
                     {formatCurrency(item.pricePerUnit)}
@@ -480,8 +480,7 @@ export default function TransactionDetailPage() {
                         <div className="flex items-center gap-2">
                           <span>{ri.productName}</span>
                           <span className="text-muted-foreground">
-                            {formatQuantity(ri.quantityReturned)}{" "}
-                            {orig?.measuringUnit ?? "m"}
+                            {formatQuantity(ri.quantityReturned, orig?.measuringUnit ?? "m")}
                           </span>
                           <Badge variant="secondary" className="text-xs">
                             {reasonLabel(ri.reason)}
