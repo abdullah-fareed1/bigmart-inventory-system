@@ -40,16 +40,40 @@ export async function getDashboardStats() {
       }),
     ]);
 
-    // Batch 2: Stock stats
-    const [lowStockCount] = await Promise.all([
-      prisma.stock.count({
-        where: {
-          isActive: true,
-          deletedAt: null,
-          quantityRemaining: { lt: 10 },
-        },
-      }),
-    ]);
+    // Batch 2: Stock stats (aggregated - group by product/supplier/prices)
+    const allActiveStocks = await prisma.stock.findMany({
+      where: {
+        isActive: true,
+        deletedAt: null,
+      },
+      select: {
+        productId: true,
+        supplierId: true,
+        buyingPricePerUnit: true,
+        sellingPricePerUnit: true,
+        quantityRemaining: true,
+      },
+    });
+
+    // Group stocks and count low stock groups
+    type GroupKey = string;
+    const groupMap = new Map<GroupKey, { total: Prisma.Decimal }>();
+
+    for (const stock of allActiveStocks) {
+      const key = `${stock.productId}|${stock.supplierId}|${Number(stock.buyingPricePerUnit).toFixed(2)}|${Number(stock.sellingPricePerUnit).toFixed(2)}`;
+      if (!groupMap.has(key)) {
+        groupMap.set(key, { total: stock.quantityRemaining });
+      } else {
+        const group = groupMap.get(key)!;
+        group.total = new Prisma.Decimal(
+          Number(group.total) + Number(stock.quantityRemaining)
+        );
+      }
+    }
+
+    const lowStockCount = Array.from(groupMap.values()).filter(
+      (g) => Number(g.total) < 10
+    ).length;
 
     // Batch 3: Transaction stats (may be slower, execute separately)
     const [todaySales, yesterdaySales, weekSales, prevWeekSales, todayTransactionCount] = await Promise.all([
@@ -282,22 +306,60 @@ export async function getLowStockItems(threshold: number = 10) {
         product: true,
         supplier: true,
       },
-      orderBy: { quantityRemaining: "asc" },
+      orderBy: [
+        { product: { name: "asc" } },
+        { suppliedDate: "asc" },
+      ],
     });
 
-    // Filter stocks where quantityRemaining is below the product's minStockAlert (or default 5)
-    const lowStocks = stocks.filter((stock) => {
-      const alertThreshold = stock.product.minStockAlert ?? 5;
-      return Number(stock.quantityRemaining) < alertThreshold;
-    });
+    // Group stocks by (productId, supplierId, buyingPrice, sellingPrice)
+    type GroupKey = string;
+    type GroupedItem = {
+      productId: string;
+      productName: string;
+      supplierName: string;
+      minStockAlert: number;
+      unit: string;
+      totalRemaining: number;
+      firstStockId: string;
+    };
 
-    return lowStocks.slice(0, 10).map((stock) => ({
-      id: stock.id,
-      productName: stock.product.name,
-      supplierName: stock.supplier.name,
-      remaining: Number(stock.quantityRemaining),
-      unit: stock.measuringUnit,
-      minStockAlert: stock.product.minStockAlert ?? 5,
+    const groupMap = new Map<GroupKey, GroupedItem>();
+
+    for (const stock of stocks) {
+      const key = `${stock.productId}|${stock.supplierId}|${Number(stock.buyingPricePerUnit).toFixed(2)}|${Number(stock.sellingPricePerUnit).toFixed(2)}`;
+
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          productId: stock.productId,
+          productName: stock.product.name,
+          supplierName: stock.supplier.name,
+          minStockAlert: stock.product.minStockAlert ?? 5,
+          unit: stock.measuringUnit,
+          totalRemaining: Number(stock.quantityRemaining),
+          firstStockId: stock.id,
+        });
+      } else {
+        const group = groupMap.get(key)!;
+        group.totalRemaining += Number(stock.quantityRemaining);
+      }
+    }
+
+    // Filter groups where aggregate totalRemaining is below the product's minStockAlert
+    const lowStocks = Array.from(groupMap.values()).filter(
+      (group) => group.totalRemaining < group.minStockAlert
+    );
+
+    // Sort by totalRemaining ascending
+    lowStocks.sort((a, b) => a.totalRemaining - b.totalRemaining);
+
+    return lowStocks.slice(0, 10).map((group) => ({
+      id: group.firstStockId,
+      productName: group.productName,
+      supplierName: group.supplierName,
+      remaining: group.totalRemaining,
+      unit: group.unit,
+      minStockAlert: group.minStockAlert,
     }));
   } catch (error) {
     console.error("Failed to fetch low stock items:", error);

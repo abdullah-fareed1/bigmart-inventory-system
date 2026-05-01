@@ -54,11 +54,12 @@ import {
   getStockById,
   recordStockPayment,
   returnStockToSupplier,
+  getRelatedStocks,
   type StockDetail,
 } from "@/actions/stocks";
 import { getAvailableCredit } from "@/actions/credit-notes";
 import { getShopSettings } from "@/actions/settings";
-import { formatCurrency, formatDateTime, formatQuantity } from "@/lib/format";
+import { formatCurrency, formatDateTime, formatDate, formatQuantity } from "@/lib/format";
 import { printGRN } from "@/components/receipts/grn-receipt";
 import { printSupplierReturn } from "@/components/receipts/supplier-return-receipt";
 
@@ -102,6 +103,17 @@ export default function StockDetailPage() {
 
   const [stock, setStock] = useState<StockDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [relatedStocks, setRelatedStocks] = useState<
+    Array<{
+      id: string;
+      grnNumber: string;
+      quantityAdded: number;
+      quantityRemaining: number;
+      suppliedDate: Date;
+      supplierBill: { id: string; billNumber: string; paymentStatus: string } | null;
+      isCurrentStock: boolean;
+    }>
+  >([]);
 
   // Payment dialog
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
@@ -142,6 +154,12 @@ export default function StockDetailPage() {
         return;
       }
       setStock(result.stock as StockDetail);
+
+      // Fetch related stocks (all sources with same product/supplier/prices)
+      const relatedResult = await getRelatedStocks(stockId);
+      if (relatedResult.relatedStocks) {
+        setRelatedStocks(relatedResult.relatedStocks);
+      }
     } catch {
       toast.error("Failed to load stock details");
     } finally {
@@ -411,6 +429,106 @@ export default function StockDetailPage() {
               </Button>
               . Payment is managed at the bill level.
             </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Related Stocks (All Sources) - Shows if more than one source */}
+      {relatedStocks.length > 1 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">
+              Stock Sources ({relatedStocks.length})
+            </CardTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              All supplier bills that have the same product, supplier, and prices
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>GRN #</TableHead>
+                  <TableHead>Bill</TableHead>
+                  <TableHead className="text-right">Qty Added</TableHead>
+                  <TableHead className="text-right">Qty Remaining</TableHead>
+                  <TableHead>Date Supplied</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {relatedStocks.map((rs) => (
+                  <TableRow
+                    key={rs.id}
+                    className={rs.isCurrentStock ? "bg-blue-50 dark:bg-blue-950/20" : "cursor-pointer hover:bg-muted/50"}
+                    onClick={() => {
+                      if (!rs.isCurrentStock) {
+                        router.push(`/stocks/${rs.id}`);
+                      }
+                    }}
+                  >
+                    <TableCell className="font-mono text-sm">
+                      {rs.grnNumber}
+                      {rs.isCurrentStock && (
+                        <Badge variant="default" className="ml-2 text-xs">
+                          Current
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {rs.supplierBill ? (
+                        <Button
+                          variant="link"
+                          className="h-auto p-0 font-mono text-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            router.push(
+                              `/supplier-bills/${rs.supplierBill!.id}`
+                            );
+                          }}
+                        >
+                          {rs.supplierBill.billNumber}
+                        </Button>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">
+                          —
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatQuantity(rs.quantityAdded, stock.measuringUnit)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatQuantity(rs.quantityRemaining, stock.measuringUnit)}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {formatDate(rs.suppliedDate)}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-200 dark:border-blue-800">
+              <div className="text-xs font-medium text-blue-900 dark:text-blue-100 space-y-1">
+                <div>
+                  Total Combined Stock:{" "}
+                  <span className="font-bold">
+                    {formatQuantity(
+                      relatedStocks.reduce((sum, rs) => sum + rs.quantityAdded, 0),
+                      stock.measuringUnit
+                    )}
+                  </span>
+                </div>
+                <div>
+                  Total Remaining:{" "}
+                  <span className="font-bold">
+                    {formatQuantity(
+                      relatedStocks.reduce((sum, rs) => sum + rs.quantityRemaining, 0),
+                      stock.measuringUnit
+                    )}
+                  </span>
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       )}

@@ -21,39 +21,18 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Search, Package, AlertTriangle, FileText } from "lucide-react";
+import { Search, Package, AlertTriangle, FileText } from "lucide-react";
 import { toast } from "sonner";
 
 import {
-  getStocks,
-  createStock,
+  getStocksGrouped,
   type StockWithRelations,
 } from "@/actions/stocks";
-import { getProducts } from "@/actions/products";
-import { getSuppliers } from "@/actions/suppliers";
-import { StockForm, type StockFormData } from "@/components/forms/stock-form";
 import { formatCurrency, formatDate, formatQuantity } from "@/lib/format";
 
-// ─── Payment Status Badge ────────────────────────────────────────
-
-function PaymentStatusBadge({ status }: { status: string }) {
-  const variant =
-    status === "PAID"
-      ? "default"
-      : status === "PARTIAL"
-        ? "secondary"
-        : "destructive";
-
-  return <Badge variant={variant}>{status}</Badge>;
-}
+// Type for grouped stocks
+type GroupedStock = Awaited<ReturnType<typeof getStocksGrouped>>["groups"][number];
 
 // ─── Page Component ──────────────────────────────────────────────
 
@@ -61,7 +40,7 @@ export default function StocksPage() {
   const router = useRouter();
 
   // State
-  const [stocks, setStocks] = useState<StockWithRelations[]>([]);
+  const [stocks, setStocks] = useState<GroupedStock[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -70,31 +49,20 @@ export default function StocksPage() {
   // Filters
   const [search, setSearch] = useState("");
   const [supplierId, setSupplierId] = useState<string>("");
-  const [paymentStatus, setPaymentStatus] = useState<string>("");
   const [showLowStock, setShowLowStock] = useState(false);
-
-  // Add stock dialog
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [products, setProducts] = useState<
-    { id: string; name: string; primaryUnit: string }[]
-  >([]);
-  const [suppliers, setSuppliers] = useState<
-    { id: string; name: string; phoneNumber: string }[]
-  >([]);
 
   // Fetch stocks
   const fetchStocks = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getStocks({
+      const result = await getStocksGrouped({
         search: search || undefined,
         supplierId: supplierId || undefined,
-        paymentStatus: paymentStatus || undefined,
         lowStock: showLowStock || undefined,
         page,
         pageSize: 20,
       });
-      setStocks(result.stocks);
+      setStocks(result.groups);
       setTotal(result.total);
       setTotalPages(result.totalPages);
     } catch {
@@ -102,71 +70,11 @@ export default function StocksPage() {
     } finally {
       setLoading(false);
     }
-  }, [search, supplierId, paymentStatus, showLowStock, page]);
+  }, [search, supplierId, showLowStock, page]);
 
   useEffect(() => {
     fetchStocks();
   }, [fetchStocks]);
-
-  // Load products and suppliers for the form
-  const loadFormData = async () => {
-    try {
-      const [productsResult, suppliersResult] = await Promise.all([
-        getProducts({ isActive: true }),
-        getSuppliers({ isActive: true }),
-      ]);
-
-      // getProducts returns { success, data: { products: [...] } }
-      // Extract correctly based on actual response shape
-      if (productsResult.success && productsResult.data) {
-        setProducts(
-          productsResult.data.products.map(
-            (p: { id: string; name: string; primaryUnit: string }) => ({
-              id: p.id,
-              name: p.name,
-              primaryUnit: p.primaryUnit,
-            })
-          )
-        );
-      } else {
-        setProducts([]);
-      }
-
-      // getSuppliers returns { suppliers: [...] }
-      setSuppliers(
-        (suppliersResult.suppliers || []).map(
-          (s: { id: string; name: string; phoneNumber: string }) => ({
-            id: s.id,
-            name: s.name,
-            phoneNumber: s.phoneNumber,
-          })
-        )
-      );
-    } catch {
-      toast.error("Failed to load form data");
-    }
-  };
-
-  const handleOpenAddDialog = async () => {
-    await loadFormData();
-    setShowAddDialog(true);
-  };
-
-    // Handle create stock
-  const handleCreateStock = async (data: StockFormData) => {
-    const result = await createStock(data);
-    if (result.error) {
-      toast.error(result.error);
-      return;
-    }
-    if (result.merged) {
-      toast.success(`Stock merged into existing record — quantity updated`);
-    } else {
-      toast.success(`Stock added with GRN: ${result.stock?.grnNumber}`);
-    }
-    setShowAddDialog(false);
-    fetchStocks();
-  };
 
   // Debounced search
   const [searchInput, setSearchInput] = useState("");
@@ -193,10 +101,6 @@ export default function StocksPage() {
             <FileText className="mr-2 h-4 w-4" />
             Add Supplier Bill
           </Button>
-          <Button onClick={handleOpenAddDialog}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Single Stock
-          </Button>
         </div>
       </div>
 
@@ -205,30 +109,12 @@ export default function StocksPage() {
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by GRN, product, or supplier..."
+            placeholder="Search by product or supplier..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             className="pl-9"
           />
         </div>
-
-        <Select
-          value={paymentStatus}
-          onValueChange={(val) => {
-            setPaymentStatus(val === "ALL" ? "" : val);
-            setPage(1);
-          }}
-        >
-          <SelectTrigger className="w-[150px]">
-            <SelectValue placeholder="Payment Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Status</SelectItem>
-            <SelectItem value="PAID">Paid</SelectItem>
-            <SelectItem value="UNPAID">Unpaid</SelectItem>
-            <SelectItem value="PARTIAL">Partial</SelectItem>
-          </SelectContent>
-        </Select>
 
         <Button
           variant={showLowStock ? "default" : "outline"}
@@ -253,22 +139,20 @@ export default function StocksPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>GRN #</TableHead>
-              <TableHead>Source</TableHead>
               <TableHead>Product</TableHead>
               <TableHead>Supplier</TableHead>
-              <TableHead className="text-right">Qty Remaining</TableHead>
+              <TableHead className="text-right">Buying Price</TableHead>
               <TableHead className="text-right">Selling Price</TableHead>
+              <TableHead className="text-right">Total Qty</TableHead>
               <TableHead className="text-right">Total Cost</TableHead>
-              <TableHead>Payment</TableHead>
-              <TableHead>Date</TableHead>
+              <TableHead className="text-center">Sources</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
-                  {Array.from({ length: 9 }).map((_, j) => (
+                  {Array.from({ length: 7 }).map((_, j) => (
                     <TableCell key={j}>
                       <Skeleton className="h-4 w-full" />
                     </TableCell>
@@ -277,42 +161,28 @@ export default function StocksPage() {
               ))
             ) : stocks.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="text-center py-8">
+                <TableCell colSpan={7} className="text-center py-8">
                   <Package className="mx-auto h-8 w-8 text-muted-foreground mb-2" />
                   <p className="text-muted-foreground">No stocks found</p>
                 </TableCell>
               </TableRow>
             ) : (
-              stocks.map((stock) => {
-                const remaining = Number(stock.quantityRemaining);
-                const isLow = remaining > 0 && remaining < 10;
-                const isOut = remaining <= 0;
+              stocks.map((group) => {
+                const isLow = group.totalQuantityRemaining > 0 && group.totalQuantityRemaining < 10;
+                const isOut = group.totalQuantityRemaining <= 0;
 
                 return (
                   <TableRow
-                    key={stock.id}
+                    key={`${group.productId}|${group.supplierId}|${group.buyingPricePerUnit}|${group.sellingPricePerUnit}`}
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => router.push(`/stocks/${stock.id}`)}
+                    onClick={() => {
+                      // Navigate to the first stock's detail page
+                      const firstStock = group.stocks[0];
+                      if (firstStock) {
+                        router.push(`/stocks/${firstStock.id}`);
+                      }
+                    }}
                   >
-                    <TableCell className="font-mono text-sm">
-                      {stock.grnNumber}
-                    </TableCell>
-                    <TableCell>
-                      {stock.supplierBill ? (
-                        <Badge
-                          variant="outline"
-                          className="font-mono text-xs cursor-pointer"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            router.push(`/supplier-bills/${stock.supplierBill!.id}`);
-                          }}
-                        >
-                          {stock.supplierBill.billNumber}
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">Standalone</span>
-                      )}
-                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <span
@@ -322,7 +192,7 @@ export default function StocksPage() {
                               : ""
                           }
                         >
-                          {stock.product.name}
+                          {group.product.name}
                         </span>
                         {isOut && (
                           <Badge
@@ -334,27 +204,29 @@ export default function StocksPage() {
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>{stock.supplier.name}</TableCell>
+                    <TableCell>{group.supplier.name}</TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrency(group.buyingPricePerUnit)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {formatCurrency(group.sellingPricePerUnit)}
+                    </TableCell>
                     <TableCell className="text-right">
                       <span
                         className={
                           isLow ? "text-amber-600 font-medium" : ""
                         }
                       >
-                        {formatQuantity(remaining, stock.measuringUnit)}
+                        {formatQuantity(group.totalQuantityRemaining, group.measuringUnit)}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(stock.sellingPricePerUnit)}
+                      {formatCurrency(group.totalCost)}
                     </TableCell>
-                    <TableCell className="text-right">
-                      {formatCurrency(stock.totalCost)}
-                    </TableCell>
-                    <TableCell>
-                      <PaymentStatusBadge status={stock.paymentStatus} />
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {formatDate(stock.suppliedDate)}
+                    <TableCell className="text-center">
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {group.stocks.length} {group.stocks.length === 1 ? "source" : "sources"}
+                      </Badge>
                     </TableCell>
                   </TableRow>
                 );
@@ -390,25 +262,6 @@ export default function StocksPage() {
           </div>
         </div>
       )}
-
-      {/* Add Stock Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto w-[95vw]">
-          <DialogHeader>
-            <DialogTitle>Add New Stock</DialogTitle>
-            <DialogDescription>
-              Add a new stock entry. A GRN number will be automatically
-              generated.
-            </DialogDescription>
-          </DialogHeader>
-          <StockForm
-            products={products}
-            suppliers={suppliers}
-            onSubmit={handleCreateStock}
-            onCancel={() => setShowAddDialog(false)}
-          />
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

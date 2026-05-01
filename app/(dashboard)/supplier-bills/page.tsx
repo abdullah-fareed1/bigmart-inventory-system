@@ -6,23 +6,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
-import { SupplierBillForm } from "@/components/forms/supplier-bill-form";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { getSupplierBills } from "@/actions/supplier-bills";
-import { createSupplierBill } from "@/actions/supplier-bills";
-import { getProducts } from "@/actions/products";
 import { getSuppliers } from "@/actions/suppliers";
 
 export default function SupplierBillsPage() {
   const router = useRouter();
   const [bills, setBills] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddDialog, setShowAddDialog] = useState(false);
   const [search, setSearch] = useState("");
   const [filterSupplier, setFilterSupplier] = useState("all");
   const [filterStatus, setFilterStatus] = useState("all");
@@ -30,8 +25,6 @@ export default function SupplierBillsPage() {
   const [total, setTotal] = useState(0);
   const [pageSize] = useState(20);
   const [suppliers, setSuppliers] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [dialogLoading, setDialogLoading] = useState(false);
 
   const pageCount = Math.ceil(total / pageSize);
 
@@ -57,50 +50,6 @@ export default function SupplierBillsPage() {
     }
   }, [search, filterSupplier, filterStatus, page, pageSize]);
 
-  const loadDialogData = async () => {
-    try {
-      const [productsResult, suppliersResult] = await Promise.all([
-        getProducts({ isActive: true }),
-        getSuppliers({ isActive: true }),
-      ]);
-
-      if (productsResult.success) {
-        setProducts(productsResult.data?.products || []);
-      }
-      if (suppliersResult.suppliers) {
-        setSuppliers(suppliersResult.suppliers || []);
-      }
-    } catch (error) {
-      toast.error("Failed to load form data");
-    }
-  };
-
-  const handleOpenDialog = async () => {
-    setDialogLoading(true);
-    try {
-      await loadDialogData();
-    } finally {
-      setDialogLoading(false);
-    }
-    setShowAddDialog(true);
-  };
-
-  const handleCreateBill = async (data: any) => {
-    try {
-      const result = await createSupplierBill(data);
-      if (result.success) {
-        toast.success(`Supplier bill ${result.data?.billNumber} created`);
-        setShowAddDialog(false);
-        setPage(1);
-        await fetchBills();
-      } else {
-        toast.error(result.error || "Failed to create bill");
-      }
-    } catch (error) {
-      toast.error("An error occurred");
-    }
-  };
-
   // Initial load and refetch on dependency change
   useEffect(() => {
     fetchBills();
@@ -114,9 +63,9 @@ export default function SupplierBillsPage() {
           <h1 className="text-3xl font-bold tracking-tight">Supplier Bills</h1>
           <p className="text-muted-foreground mt-1">Manage supplier deliveries and invoices</p>
         </div>
-        <Button onClick={handleOpenDialog} disabled={dialogLoading}>
+        <Button onClick={() => router.push("/supplier-bills/add")}>
           <Plus className="mr-2 h-4 w-4" />
-          {dialogLoading ? "Loading..." : "Create Supplier Bill"}
+          Create Supplier Bill
         </Button>
       </div>
 
@@ -285,22 +234,6 @@ export default function SupplierBillsPage() {
           )}
         </CardContent>
       </Card>
-
-      {/* Create Bill Dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto w-[95vw]">
-          <DialogHeader>
-            <DialogTitle>Create Supplier Bill</DialogTitle>
-          </DialogHeader>
-          <SupplierBillForm
-            products={products}
-            suppliers={suppliers}
-            onSubmit={handleCreateBill}
-            onCancel={() => setShowAddDialog(false)}
-            isLoading={dialogLoading}
-          />
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

@@ -281,7 +281,7 @@ export async function createSupplierBill(
         },
       });
 
-      // 9b: Create one Stock per line item, linked to the bill
+      // 9b: Create or merge stocks per line item
       const createdStocks: { id: string }[] = [];
       for (let i = 0; i < lineItems.length; i++) {
         const item = lineItems[i];
@@ -298,6 +298,8 @@ export async function createSupplierBill(
             ? "PARTIAL"
             : "UNPAID";
 
+        // Create new stock linked to the bill (never merge)
+        // Each bill maintains its own separate stock records
         const stock = await tx.stock.create({
           data: {
             grnNumber,

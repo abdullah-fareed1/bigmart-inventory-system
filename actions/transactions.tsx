@@ -264,7 +264,9 @@ export async function createTransaction(input: {
       }
     }
 
-    // 4. Fetch all stocks and validate availability
+    // 4. Fetch all stocks and validate availability with FIFO support
+    const { getRelatedStocksForDeduction } = await import("@/actions/stocks");
+    
     const stockIds = validated.items.map((i) => i.stockId);
     const stocks = await prisma.stock.findMany({
       where: { id: { in: stockIds } },
@@ -276,18 +278,72 @@ export async function createTransaction(input: {
 
     const stockMap = new Map(stocks.map((s) => [s.id, s]));
 
-    // Validate each item
+    // For each item, get all related stocks for FIFO validation
+    const deductionPlans: Array<{
+      productId: string;
+      productName: string;
+      supplierName: string;
+      quantity: number;
+      measuringUnit: string;
+      pricePerUnit: number;
+      deductions: Array<{ stockId: string; quantity: number }>;
+    }> = [];
+
     for (const item of validated.items) {
       const stock = stockMap.get(item.stockId);
       if (!stock) {
         return { success: false, error: `Stock ${item.stockId} not found` };
       }
-      if (Number(stock.quantityRemaining) < item.quantity) {
+
+      // Get all related stocks for FIFO deduction
+      const relatedResult = await getRelatedStocksForDeduction(item.stockId);
+      if (relatedResult.error || !relatedResult.stocks) {
         return {
           success: false,
-          error: `Insufficient stock for ${stock.product.name}. Available: ${Number(stock.quantityRemaining)}`,
+          error: `Cannot find related stocks for ${stock.product.name}`,
         };
       }
+
+      // Calculate total available from all related stocks
+      const totalAvailable = relatedResult.stocks.reduce(
+        (sum, s) => sum + s.quantityRemaining,
+        0
+      );
+
+      if (totalAvailable < item.quantity) {
+        return {
+          success: false,
+          error: `Insufficient stock for ${stock.product.name}. Available: ${totalAvailable}`,
+        };
+      }
+
+      // Plan deductions in FIFO order
+      let quantityNeeded = item.quantity;
+      const deductions: Array<{ stockId: string; quantity: number }> = [];
+
+      for (const relatedStock of relatedResult.stocks) {
+        if (quantityNeeded <= 0) break;
+
+        const deductFromThis = Math.min(
+          quantityNeeded,
+          relatedStock.quantityRemaining
+        );
+        deductions.push({
+          stockId: relatedStock.id,
+          quantity: deductFromThis,
+        });
+        quantityNeeded -= deductFromThis;
+      }
+
+      deductionPlans.push({
+        productId: stock.product.id,
+        productName: stock.product.name,
+        supplierName: stock.supplier.name,
+        quantity: item.quantity,
+        measuringUnit: stock.measuringUnit,
+        pricePerUnit: Number(stock.sellingPricePerUnit),
+        deductions,
+      });
     }
 
     // 5. CALCULATE TOTALS
@@ -393,21 +449,26 @@ export async function createTransaction(input: {
       })),
     });
 
-    // c. Deduct stock quantities using raw SQL for row locking
-    for (const item of validated.items) {
-      await prisma.$executeRaw`
-        UPDATE "Stock"
-        SET "quantityRemaining" = "quantityRemaining" - ${item.quantity}::numeric,
-            "updatedAt" = NOW()
-        WHERE id = ${item.stockId}
-        AND "quantityRemaining" >= ${item.quantity}::numeric
-      `;
+    // c. Deduct stock quantities using deduction plans (FIFO across multiple stocks)
+    const allStockIdsToUpdate = new Set<string>();
+    
+    for (const plan of deductionPlans) {
+      for (const deduction of plan.deductions) {
+        await prisma.$executeRaw`
+          UPDATE "Stock"
+          SET "quantityRemaining" = "quantityRemaining" - ${deduction.quantity}::numeric,
+              "updatedAt" = NOW()
+          WHERE id = ${deduction.stockId}
+          AND "quantityRemaining" >= ${deduction.quantity}::numeric
+        `;
+        allStockIdsToUpdate.add(deduction.stockId);
+      }
     }
 
     // d. Mark depleted stocks as inactive
     await prisma.stock.updateMany({
       where: {
-        id: { in: stockIds },
+        id: { in: Array.from(allStockIdsToUpdate) },
         quantityRemaining: { lte: 0 },
       },
       data: { isActive: false },
@@ -501,7 +562,7 @@ export async function searchProductsForPOS(query: string) {
       return { success: true, data: [] };
     }
 
-    // Find stocks with matching product names, ordered by FIFO (suppliedDate ASC)
+    // Find all stocks with matching product names
     const stocks = await prisma.stock.findMany({
       where: {
         deletedAt: null,
@@ -514,26 +575,64 @@ export async function searchProductsForPOS(query: string) {
         product: {
           select: { id: true, name: true, primaryUnit: true, imageUrl: true },
         },
-        supplier: { select: { name: true } },
+        supplier: { select: { id: true, name: true } },
       },
       orderBy: [
         { product: { name: "asc" } },
         { suppliedDate: "asc" }, // FIFO: oldest first
       ],
-      take: 20,
     });
 
-    const results = stocks.map((stock) => ({
-      stockId: stock.id,
-      productId: stock.product.id,
-      productName: stock.product.name,
-      supplierName: stock.supplier.name,
-      sellingPrice: Number(stock.sellingPricePerUnit),
-      quantityRemaining: Number(stock.quantityRemaining),
-      measuringUnit: stock.measuringUnit,
-      imageUrl: stock.product.imageUrl,
-      isActive: stock.isActive,
-      isOutOfStock: Number(stock.quantityRemaining) <= 0,
+    // Group by (productId, supplierId, sellingPrice) and aggregate quantities
+    type GroupKey = string;
+    type GroupedResult = {
+      productId: string;
+      productName: string;
+      supplierName: string;
+      sellingPrice: number;
+      totalQuantityRemaining: number;
+      measuringUnit: string;
+      imageUrl: string | null;
+      isActive: boolean;
+      // For POS, we pick the first stock ID in FIFO order for linking
+      representativeStockId: string;
+    };
+
+    const groupMap = new Map<GroupKey, GroupedResult>();
+
+    for (const stock of stocks) {
+      const key = `${stock.productId}|${stock.supplierId}|${Number(stock.sellingPricePerUnit).toFixed(2)}`;
+
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          productId: stock.product.id,
+          productName: stock.product.name,
+          supplierName: stock.supplier.name,
+          sellingPrice: Number(stock.sellingPricePerUnit),
+          totalQuantityRemaining: Number(stock.quantityRemaining),
+          measuringUnit: stock.measuringUnit,
+          imageUrl: stock.product.imageUrl,
+          isActive: stock.isActive,
+          representativeStockId: stock.id, // First in FIFO order
+        });
+      } else {
+        const group = groupMap.get(key)!;
+        group.totalQuantityRemaining += Number(stock.quantityRemaining);
+        // Keep the first stock ID for linking
+      }
+    }
+
+    const results = Array.from(groupMap.values()).map((group) => ({
+      stockId: group.representativeStockId,
+      productId: group.productId,
+      productName: group.productName,
+      supplierName: group.supplierName,
+      sellingPrice: group.sellingPrice,
+      quantityRemaining: group.totalQuantityRemaining,
+      measuringUnit: group.measuringUnit,
+      imageUrl: group.imageUrl,
+      isActive: group.isActive,
+      isOutOfStock: group.totalQuantityRemaining <= 0,
     }));
 
     return { success: true, data: results };

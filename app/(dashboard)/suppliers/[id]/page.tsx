@@ -32,7 +32,7 @@ import { ArrowLeft, Pencil, Phone } from "lucide-react";
 import { toast } from "sonner";
 
 import { getSupplierById, updateSupplier } from "@/actions/suppliers";
-import { getStocks } from "@/actions/stocks";
+import { getStocksGrouped } from "@/actions/stocks";
 import { getSupplierBillsBySupplier } from "@/actions/supplier-bills";
 import { getCreditNotesBySupplier, getAvailableCredit } from "@/actions/credit-notes";
 import { SupplierForm, type SupplierFormData } from "@/components/forms/supplier-form";
@@ -79,7 +79,7 @@ export default function SupplierDetailPage() {
       const [supplierResult, stocksResult, billsResult, cnResult, creditResult] =
         await Promise.all([
           getSupplierById(supplierId),
-          getStocks({ supplierId, pageSize: 100 }),
+          getStocksGrouped({ supplierId, pageSize: 100 }),
           getSupplierBillsBySupplier(supplierId),
           getCreditNotesBySupplier(supplierId),
           getAvailableCredit(supplierId),
@@ -96,7 +96,7 @@ export default function SupplierDetailPage() {
         setStats(supplierResult.stats as typeof stats);
       }
 
-      setStocks(stocksResult.stocks);
+      setStocks(stocksResult.groups);
       setSupplierBills(billsResult.bills);
       setCreditNotes(cnResult.creditNotes);
       setAvailableCredit(creditResult.availableCredit);

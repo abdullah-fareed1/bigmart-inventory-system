@@ -30,7 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Loader2, CreditCard } from "lucide-react";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatQuantity } from "@/lib/format";
 import { getAvailableCredit } from "@/actions/credit-notes";
 import { checkMergeableStock } from "@/actions/stocks";
 

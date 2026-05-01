@@ -9,24 +9,6 @@ import { applyCreditToStock } from "./credit-notes";
 
 // ─── Validation Schemas ──────────────────────────────────────────
 
-const createStockSchema = z.object({
-  productId: z.string().min(1, "Product is required"),
-  supplierId: z.string().min(1, "Supplier is required"),
-  quantity: z.number().positive("Quantity must be greater than 0"),
-  measuringUnit: z.string().min(1, "Measuring unit is required"),
-  buyingPricePerUnit: z
-    .number()
-    .positive("Buying price must be greater than 0"),
-  sellingPricePerUnit: z
-    .number()
-    .positive("Selling price must be greater than 0"),
-  paymentStatus: z.enum(["PAID", "UNPAID", "PARTIAL"]),
-  amountPaid: z.number().min(0).optional(),
-  creditToApply: z.number().min(0).optional(),
-  notes: z.string().optional(),
-  supplierBillId: z.string().optional(),
-});
-
 // amountPaid: min(0) to allow credit-only payments
 const recordPaymentSchema = z.object({
   stockId: z.string().min(1),
@@ -87,7 +69,7 @@ export type StockDetail = NonNullable<
 
 // ─── Actions ─────────────────────────────────────────────────────
 
-async function findMergeableStock(params: {
+export async function findMergeableStock(params: {
   productId: string;
   supplierId: string;
   buyingPricePerUnit: number;
@@ -96,20 +78,24 @@ async function findMergeableStock(params: {
 }): Promise<string | null> {
   // Returns the id of a matching mergeable stock, or null.
   // Mergeable criteria: same product, supplier, buying price, selling price,
-  // unit, still active, not soft-deleted, and NOT linked to any supplier bill.
-  // Billed stocks are never merge targets.
+  // unit, still active, and not soft-deleted.
+  // Stocks can be merged regardless of their supplier bill association.
   // When multiple matches exist (shouldn't happen but just in case),
   // we pick the oldest one (suppliedDate ASC) so FIFO remains consistent.
+  
+  // Normalize prices to 2 decimal places for consistent comparison
+  const buyingPrice = parseFloat(params.buyingPricePerUnit.toFixed(2));
+  const sellingPrice = parseFloat(params.sellingPricePerUnit.toFixed(2));
+  
   const existing = await prisma.stock.findFirst({
     where: {
       productId: params.productId,
       supplierId: params.supplierId,
-      buyingPricePerUnit: params.buyingPricePerUnit,
-      sellingPricePerUnit: params.sellingPricePerUnit,
+      buyingPricePerUnit: buyingPrice,
+      sellingPricePerUnit: sellingPrice,
       measuringUnit: params.measuringUnit,
       isActive: true,
       deletedAt: null,
-      supplierBillId: null,
     },
     orderBy: { suppliedDate: "asc" },
     select: { id: true },
@@ -137,16 +123,19 @@ export async function checkMergeableStock(params: {
       return { mergeTarget: null };
     }
 
+    // Normalize prices to 2 decimal places for consistent comparison
+    const buyingPrice = parseFloat(params.buyingPricePerUnit.toFixed(2));
+    const sellingPrice = parseFloat(params.sellingPricePerUnit.toFixed(2));
+
     const existing = await prisma.stock.findFirst({
       where: {
         productId: params.productId,
         supplierId: params.supplierId,
-        buyingPricePerUnit: params.buyingPricePerUnit,
-        sellingPricePerUnit: params.sellingPricePerUnit,
+        buyingPricePerUnit: buyingPrice,
+        sellingPricePerUnit: sellingPrice,
         measuringUnit: params.measuringUnit,
         isActive: true,
         deletedAt: null,
-        supplierBillId: null,
       },
       orderBy: { suppliedDate: "asc" },
       select: {
@@ -236,6 +225,141 @@ export async function getStocks(params?: {
   };
 }
 
+/**
+ * Get stocks grouped by (productId, supplierId, buyingPrice, sellingPrice).
+ * Returns aggregated quantities and a list of contributing stock records.
+ * Used for display in stocks page, POS, alerts, etc.
+ */
+export async function getStocksGrouped(params?: {
+  search?: string;
+  supplierId?: string;
+  isActive?: boolean;
+  lowStock?: boolean;
+  page?: number;
+  pageSize?: number;
+}) {
+  const {
+    search,
+    supplierId,
+    isActive,
+    lowStock,
+    page = 1,
+    pageSize = 20,
+  } = params || {};
+
+  const where: Record<string, unknown> = { deletedAt: null };
+  if (supplierId) where.supplierId = supplierId;
+  if (isActive !== undefined) where.isActive = isActive;
+
+  if (search) {
+    where.OR = [
+      { product: { name: { contains: search, mode: "insensitive" } } },
+      { supplier: { name: { contains: search, mode: "insensitive" } } },
+    ];
+  }
+
+  // Fetch all matching stocks
+  const allStocks = await prisma.stock.findMany({
+    where,
+    include: {
+      product: { select: { id: true, name: true, primaryUnit: true } },
+      supplier: { select: { id: true, name: true, phoneNumber: true } },
+      supplierBill: {
+        select: {
+          id: true,
+          billNumber: true,
+        },
+      },
+    },
+    orderBy: { suppliedDate: "desc" },
+  });
+
+  // Group by (productId, supplierId, buyingPrice, sellingPrice)
+  type GroupKey = string;
+  type GroupedEntry = {
+    productId: string;
+    product: { id: string; name: string; primaryUnit: string };
+    supplierId: string;
+    supplier: { id: string; name: string; phoneNumber: string };
+    buyingPricePerUnit: number;
+    sellingPricePerUnit: number;
+    measuringUnit: string;
+    totalQuantityAdded: number;
+    totalQuantityRemaining: number;
+    totalCost: number;
+    isActive: boolean;
+    stocks: Array<{
+      id: string;
+      grnNumber: string;
+      quantityAdded: number;
+      quantityRemaining: number;
+      supplierBillId: string | null;
+      supplierBill: { id: string; billNumber: string } | null;
+      suppliedDate: Date;
+    }>;
+  };
+
+  const groupMap = new Map<GroupKey, GroupedEntry>();
+
+  for (const stock of allStocks) {
+    const key = `${stock.productId}|${stock.supplierId}|${Number(stock.buyingPricePerUnit).toFixed(2)}|${Number(stock.sellingPricePerUnit).toFixed(2)}`;
+
+    if (!groupMap.has(key)) {
+      groupMap.set(key, {
+        productId: stock.productId,
+        product: stock.product,
+        supplierId: stock.supplierId,
+        supplier: stock.supplier,
+        buyingPricePerUnit: Number(stock.buyingPricePerUnit),
+        sellingPricePerUnit: Number(stock.sellingPricePerUnit),
+        measuringUnit: stock.measuringUnit,
+        totalQuantityAdded: 0,
+        totalQuantityRemaining: 0,
+        totalCost: 0,
+        isActive: stock.isActive,
+        stocks: [],
+      });
+    }
+
+    const group = groupMap.get(key)!;
+    group.totalQuantityAdded += Number(stock.quantityAdded);
+    group.totalQuantityRemaining += Number(stock.quantityRemaining);
+    group.totalCost += Number(stock.totalCost);
+    group.stocks.push({
+      id: stock.id,
+      grnNumber: stock.grnNumber,
+      quantityAdded: Number(stock.quantityAdded),
+      quantityRemaining: Number(stock.quantityRemaining),
+      supplierBillId: stock.supplierBillId,
+      supplierBill: stock.supplierBill,
+      suppliedDate: stock.suppliedDate,
+    });
+  }
+
+  // Filter by lowStock if needed
+  let grouped = Array.from(groupMap.values());
+  if (lowStock) {
+    grouped = grouped.filter(
+      (g) => g.totalQuantityRemaining < 10 && g.isActive
+    );
+  }
+
+  // Apply pagination to the grouped results
+  const total = grouped.length;
+  const paginatedGroups = grouped.slice(
+    (page - 1) * pageSize,
+    page * pageSize
+  );
+
+  return {
+    groups: paginatedGroups,
+    total,
+    page,
+    pageSize,
+    totalPages: Math.ceil(total / pageSize),
+  };
+}
+
 export async function getStockById(id: string) {
   const rawStock = await prisma.stock.findUnique({
     where: { id },
@@ -309,171 +433,97 @@ export async function getStockById(id: string) {
 }
 
 /**
- * Create a new stock entry.
- * GRN number generated BEFORE the transaction to avoid timeout.
+ * Get all related stocks (same product, supplier, prices) for a given stock.
+ * Used to show all contributing sources on the detail page.
  */
-export async function createStock(data: z.infer<typeof createStockSchema>) {
-  const parsed = createStockSchema.safeParse(data);
-  if (!parsed.success) return { error: parsed.error.issues[0].message };
-
-  const input = parsed.data;
-
-  if (input.sellingPricePerUnit <= input.buyingPricePerUnit)
-    return { error: "Selling price must be greater than buying price" };
-
-  const product = await prisma.product.findUnique({
-    where: { id: input.productId },
+export async function getRelatedStocks(stockId: string) {
+  const stock = await prisma.stock.findUnique({
+    where: { id: stockId },
+    select: {
+      productId: true,
+      supplierId: true,
+      buyingPricePerUnit: true,
+      sellingPricePerUnit: true,
+    },
   });
-  if (!product || !product.isActive || product.deletedAt)
-    return { error: "Product not found or is inactive" };
 
-  const supplier = await prisma.supplier.findUnique({
-    where: { id: input.supplierId },
-  });
-  if (!supplier || !supplier.isActive || supplier.deletedAt)
-    return { error: "Supplier not found or is inactive" };
+  if (!stock) return { error: "Stock not found", relatedStocks: [] };
 
-  const totalCost = parseFloat(
-    (input.quantity * input.buyingPricePerUnit).toFixed(2)
-  );
-
-  let amountPaid = 0;
-  if (input.paymentStatus === "PAID") {
-    amountPaid = totalCost;
-  } else if (input.paymentStatus === "PARTIAL") {
-    if (!input.amountPaid || input.amountPaid <= 0)
-      return { error: "Amount paid is required for partial payment" };
-    if (input.amountPaid >= totalCost)
-      return {
-        error: "Partial payment must be less than total cost. Use PAID status instead.",
-      };
-    amountPaid = input.amountPaid;
-  }
-
-  const creditToApply = input.creditToApply || 0;
-  if (creditToApply > 0) {
-    const remainingAfterCash = totalCost - amountPaid;
-    if (creditToApply > remainingAfterCash + 0.01)
-      return {
-        error: `Credit (Rs. ${creditToApply.toFixed(2)}) exceeds remaining balance (Rs. ${remainingAfterCash.toFixed(2)})`,
-      };
-  }
-
-  // --- MERGE CHECK (standalone stocks only) ---
-  // Only runs when this stock is NOT part of a supplier bill.
-  // If a mergeable stock exists, increment its quantities instead of
-  // creating a new record. Return early with merged: true.
-  if (!input.supplierBillId) {
-    const mergeTargetId = await findMergeableStock({
-      productId: input.productId,
-      supplierId: input.supplierId,
-      buyingPricePerUnit: input.buyingPricePerUnit,
-      sellingPricePerUnit: input.sellingPricePerUnit,
-      measuringUnit: input.measuringUnit,
-    });
-
-    if (mergeTargetId) {
-      const merged = await prisma.stock.update({
-        where: { id: mergeTargetId },
-        data: {
-          quantityAdded: { increment: input.quantity },
-          quantityRemaining: { increment: input.quantity },
-          totalCost: { increment: totalCost },
-          // paymentStatus and amountPaid are intentionally NOT updated here.
-          // The caller should use recordStockPayment() separately if payment
-          // needs to be recorded for the merged quantity.
+  const relatedStocks = await prisma.stock.findMany({
+    where: {
+      productId: stock.productId,
+      supplierId: stock.supplierId,
+      buyingPricePerUnit: stock.buyingPricePerUnit,
+      sellingPricePerUnit: stock.sellingPricePerUnit,
+      deletedAt: null,
+    },
+    include: {
+      supplierBill: {
+        select: {
+          id: true,
+          billNumber: true,
+          paymentStatus: true,
         },
-        include: {
-          product: { select: { id: true, name: true } },
-          supplier: { select: { id: true, name: true } },
-        },
-      });
-
-      revalidatePath("/stocks");
-      revalidatePath("/dashboard");
-      revalidatePath(`/suppliers/${input.supplierId}`);
-
-      return { stock: serializeStock(merged), merged: true };
-    }
-  }
-  // --- END MERGE CHECK ---
-
-  // Generate GRN BEFORE the transaction
-  const grnNumber = await getNextNumber("grn");
-
-  const result = await prisma.$transaction(async (tx) => {
-    const effectiveAmountPaid = parseFloat(
-      (amountPaid + creditToApply).toFixed(2)
-    );
-    const effectiveStatus =
-      effectiveAmountPaid >= totalCost
-        ? "PAID"
-        : effectiveAmountPaid > 0
-          ? "PARTIAL"
-          : "UNPAID";
-
-    const stock = await tx.stock.create({
-      data: {
-        grnNumber,
-        productId: input.productId,
-        supplierId: input.supplierId,
-        supplierBillId: input.supplierBillId ?? null,
-        quantityAdded: input.quantity,
-        quantityRemaining: input.quantity,
-        measuringUnit: input.measuringUnit,
-        buyingPricePerUnit: input.buyingPricePerUnit,
-        sellingPricePerUnit: input.sellingPricePerUnit,
-        paymentStatus: effectiveStatus,
-        amountPaid: effectiveAmountPaid,
-        totalCost,
-        notes: input.notes || null,
       },
-      include: {
-        product: { select: { id: true, name: true } },
-        supplier: { select: { id: true, name: true } },
-      },
-    });
-
-    if (amountPaid > 0) {
-      await tx.stockSupplierPayment.create({
-        data: {
-          stockId: stock.id,
-          supplierId: input.supplierId,
-          amountPaid,
-          paymentMethod: "CASH",
-          notes: "Initial payment on stock creation",
-        },
-      });
-    }
-
-    if (creditToApply > 0) {
-      const actualCredit = await applyCreditToStock(
-        tx,
-        input.supplierId,
-        stock.id,
-        creditToApply,
-        undefined,
-      );
-      if (actualCredit > 0) {
-        await tx.stockSupplierPayment.create({
-          data: {
-            stockId: stock.id,
-            supplierId: input.supplierId,
-            amountPaid: actualCredit,
-            paymentMethod: "CREDIT_NOTE",
-            notes: "Applied from supplier credit notes",
-          },
-        });
-      }
-    }
-
-    return stock;
+    },
+    orderBy: { suppliedDate: "asc" },
   });
 
-  revalidatePath("/stocks");
-  revalidatePath("/dashboard");
-  revalidatePath(`/suppliers/${input.supplierId}`);
-  return { stock: serializeStock(result), merged: false };
+  return {
+    relatedStocks: relatedStocks.map((s) => ({
+      id: s.id,
+      grnNumber: s.grnNumber,
+      quantityAdded: Number(s.quantityAdded),
+      quantityRemaining: Number(s.quantityRemaining),
+      suppliedDate: s.suppliedDate,
+      supplierBill: s.supplierBill,
+      isCurrentStock: s.id === stockId,
+    })),
+  };
+}
+
+/**
+ * Get all related stocks for FIFO deduction in POS.
+ * Given a stockId, returns all stocks with matching product/supplier/prices
+ * ordered by suppliedDate (oldest first) for FIFO deduction.
+ */
+export async function getRelatedStocksForDeduction(stockId: string) {
+  const stock = await prisma.stock.findUnique({
+    where: { id: stockId },
+    select: {
+      productId: true,
+      supplierId: true,
+      buyingPricePerUnit: true,
+      sellingPricePerUnit: true,
+    },
+  });
+
+  if (!stock) return { error: "Stock not found", stocks: [] };
+
+  const relatedStocks = await prisma.stock.findMany({
+    where: {
+      productId: stock.productId,
+      supplierId: stock.supplierId,
+      buyingPricePerUnit: stock.buyingPricePerUnit,
+      sellingPricePerUnit: stock.sellingPricePerUnit,
+      deletedAt: null,
+      isActive: true,
+    },
+    select: {
+      id: true,
+      quantityRemaining: true,
+      grnNumber: true,
+    },
+    orderBy: { suppliedDate: "asc" }, // FIFO: oldest first
+  });
+
+  return {
+    stocks: relatedStocks.map((s) => ({
+      id: s.id,
+      quantityRemaining: Number(s.quantityRemaining),
+      grnNumber: s.grnNumber,
+    })),
+  };
 }
 
 /**

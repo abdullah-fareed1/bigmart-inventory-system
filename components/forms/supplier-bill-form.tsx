@@ -330,12 +330,12 @@ export function SupplierBillForm({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead className="text-right">Qty</TableHead>
-                <TableHead className="text-right">Buy Price</TableHead>
-                <TableHead className="text-right">Sell Price</TableHead>
-                <TableHead className="text-right">Line Cost</TableHead>
+                <TableHead className="w-[200px]">Product</TableHead>
+                <TableHead className="w-[130px]">Unit</TableHead>
+                <TableHead className="w-[90px] text-right">Qty</TableHead>
+                <TableHead className="w-[120px] text-right">Buy Price</TableHead>
+                <TableHead className="w-[120px] text-right">Sell Price</TableHead>
+                <TableHead className="w-[130px] text-right">Line Cost</TableHead>
                 <TableHead className="w-10"></TableHead>
               </TableRow>
             </TableHeader>
@@ -344,14 +344,14 @@ export function SupplierBillForm({
                 const lineCost = item.quantity * item.buyingPricePerUnit;
                 return (
                   <TableRow key={index}>
-                    <TableCell>
+                    <TableCell className="w-[200px] p-2">
                       <Select
                         value={item.productId}
                         onValueChange={(value) =>
                           handleLineItemChange(index, "productId", value)
                         }
                       >
-                        <SelectTrigger className="w-[180px]">
+                        <SelectTrigger className="w-full">
                           <SelectValue placeholder="Select..." />
                         </SelectTrigger>
                         <SelectContent>
@@ -368,14 +368,14 @@ export function SupplierBillForm({
                         </p>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="w-[130px] p-2">
                       <Select
                         value={item.measuringUnit}
                         onValueChange={(value) =>
                           handleLineItemChange(index, "measuringUnit", value)
                         }
                       >
-                        <SelectTrigger className="w-[120px]">
+                        <SelectTrigger className="w-full">
                           <SelectValue placeholder="Select..." />
                         </SelectTrigger>
                         <SelectContent>
@@ -392,12 +392,12 @@ export function SupplierBillForm({
                         </p>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="w-[90px] p-2">
                       <Input
                         type="number"
                         step="0.01"
                         min="0.01"
-                        className="w-[80px] text-right"
+                        className="w-full text-right"
                         value={item.quantity || ""}
                         onChange={(e) =>
                           handleLineItemChange(
@@ -413,12 +413,12 @@ export function SupplierBillForm({
                         </p>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="w-[120px] p-2">
                       <Input
                         type="number"
                         step="0.01"
                         min="0.01"
-                        className="w-[100px] text-right"
+                        className="w-full text-right"
                         value={item.buyingPricePerUnit || ""}
                         onChange={(e) =>
                           handleLineItemChange(
@@ -434,12 +434,12 @@ export function SupplierBillForm({
                         </p>
                       )}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="w-[120px] p-2">
                       <Input
                         type="number"
                         step="0.01"
                         min="0.01"
-                        className="w-[100px] text-right"
+                        className="w-full text-right"
                         value={item.sellingPricePerUnit || ""}
                         onChange={(e) =>
                           handleLineItemChange(
@@ -455,10 +455,10 @@ export function SupplierBillForm({
                         </p>
                       )}
                     </TableCell>
-                    <TableCell className="text-right font-medium">
+                    <TableCell className="w-[130px] text-right font-medium p-2">
                       {formatCurrency(lineCost)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="w-10 p-2">
                       <Button
                         type="button"
                         variant="ghost"
