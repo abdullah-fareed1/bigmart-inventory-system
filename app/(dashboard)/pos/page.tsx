@@ -1,7 +1,7 @@
 // src/app/(dashboard)/pos/page.tsx
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/hooks/use-cart";
@@ -188,6 +188,71 @@ export default function POSPage() {
       else if (showSuccessDialog) setShowSuccessDialog(false);
     },
   });
+
+  // Auto-focus search input on keyboard/barcode scanner input
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if a dialog/modal is open or if the key is a modifier/special key
+      if (
+        showCheckout ||
+        showCartDiscount ||
+        showQuantityDialog ||
+        showSuccessDialog ||
+        e.ctrlKey ||
+        e.altKey ||
+        e.metaKey
+      ) {
+        return;
+      }
+
+      // List of keys that should trigger auto-focus
+      const focusTriggerKeys = [
+        // Alphanumeric
+        ...Array.from({ length: 26 }, (_, i) => String.fromCharCode(97 + i)), // a-z
+        ...Array.from({ length: 26 }, (_, i) => String.fromCharCode(65 + i)), // A-Z
+        ...Array.from({ length: 10 }, (_, i) => String(i)), // 0-9
+        // Special characters that barcode scanners might emit
+        "-",
+        "_",
+        ":",
+        ";",
+        "/",
+        "*",
+        "+",
+        "=",
+        "[",
+        "]",
+        "{",
+        "}",
+        "|",
+        "\\",
+        "<",
+        ">",
+        "?",
+        ".",
+        ",",
+        " ",
+      ];
+
+      // Check if the key is in the trigger list or if it's a printable character
+      const isPrintable =
+        focusTriggerKeys.includes(e.key) || (e.key.length === 1 && !e.key.match(/[\x00-\x1F\x7F]/));
+
+      if (isPrintable && searchRef.current && document.activeElement !== searchRef.current) {
+        // Don't focus if user is typing in another input
+        if (
+          document.activeElement instanceof HTMLInputElement ||
+          document.activeElement instanceof HTMLTextAreaElement
+        ) {
+          return;
+        }
+        searchRef.current.focus();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [showCheckout, showCartDiscount, showQuantityDialog, showSuccessDialog]);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] gap-0">
