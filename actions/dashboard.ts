@@ -76,7 +76,7 @@ export async function getDashboardStats() {
     ).length;
 
     // Batch 3: Transaction stats (may be slower, execute separately)
-    const [todaySales, yesterdaySales, weekSales, prevWeekSales, todayTransactionCount] = await Promise.all([
+    const [todaySales, yesterdaySales, weekSales, prevWeekSales, todayTransactionCount, allTransactions, refundsCount, outOfStockCount, allStocks] = await Promise.all([
       prisma.transaction.aggregate({
         _sum: { totalAmount: true },
         where: {
@@ -106,6 +106,44 @@ export async function getDashboardStats() {
           saleDateTime: { gte: todayStart, lt: todayEnd },
         },
       }),
+      // Get all transactions for today to calculate COGS
+      prisma.transaction.findMany({
+        where: {
+          saleDateTime: { gte: todayStart, lt: todayEnd },
+        },
+        include: {
+          items: {
+            include: {
+              stock: true,
+            },
+          },
+        },
+      }),
+      // Count refunds today
+      prisma.refund.count({
+        where: {
+          refundDate: { gte: todayStart, lt: todayEnd },
+        },
+      }),
+      // Count out of stock items
+      prisma.stock.count({
+        where: {
+          quantityRemaining: { lte: 0 },
+          isActive: true,
+          deletedAt: null,
+        },
+      }),
+      // Calculate total inventory value
+      prisma.stock.findMany({
+        where: {
+          isActive: true,
+          deletedAt: null,
+        },
+        select: {
+          buyingPricePerUnit: true,
+          quantityRemaining: true,
+        },
+      }),
     ]);
 
   const todayTotal = Number(todaySales._sum.totalAmount ?? 0);
@@ -128,6 +166,28 @@ export async function getDashboardStats() {
         ? 100
         : 0;
 
+  // Calculate Net Profit (Revenue - COGS)
+  let totalCOGS = 0;
+  for (const transaction of allTransactions) {
+    for (const item of transaction.items) {
+      const cost = Number(item.stock?.buyingPricePerUnit ?? 0);
+      totalCOGS += cost * Number(item.quantity ?? 0);
+    }
+  }
+  const netProfit = todayTotal - totalCOGS;
+
+  // Calculate average transaction value
+  const avgTransactionValue = todayTransactionCount > 0 ? todayTotal / todayTransactionCount : 0;
+
+  // Calculate refund rate
+  const refundRate = todayTransactionCount > 0 ? (refundsCount / todayTransactionCount) * 100 : 0;
+
+  // Total inventory value (cost of all stock on hand)
+  let totalInventory = 0;
+  for (const stock of allStocks) {
+    totalInventory += Number(stock.buyingPricePerUnit) * Number(stock.quantityRemaining);
+  }
+
   return {
     todaySales: todayTotal,
     dailyTrend,
@@ -137,6 +197,11 @@ export async function getDashboardStats() {
     newCustomersThisMonth,
     lowStockCount,
     todayTransactionCount,
+    netProfit,
+    outOfStockCount,
+    avgTransactionValue,
+    refundRate,
+    totalInventoryValue: totalInventory,
   };
   } catch (error) {
     console.error("Dashboard stats error:", error);
@@ -150,6 +215,11 @@ export async function getDashboardStats() {
       newCustomersThisMonth: 0,
       lowStockCount: 0,
       todayTransactionCount: 0,
+      netProfit: 0,
+      outOfStockCount: 0,
+      avgTransactionValue: 0,
+      refundRate: 0,
+      totalInventoryValue: 0,
     };
   }
 }

@@ -3,6 +3,11 @@ import {
   TrendingUp,
   Users,
   ShoppingCart,
+  AlertTriangle,
+  TrendingDown,
+  Package,
+  Percent,
+  Zap,
 } from "lucide-react";
 import { auth } from "@/auth";
 import { PageHeader } from "@/components/layout/page-header";
@@ -65,7 +70,7 @@ export default async function DashboardPage() {
       ) : (
         <>
           {/* Full Admin Dashboard */}
-          {/* Stats Grid */}
+          {/* Stats Grid - Row 1 */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard
               title="Today's Sales"
@@ -113,6 +118,75 @@ export default async function DashboardPage() {
               title="Today's Transactions"
               value={stats.todayTransactionCount.toLocaleString()}
               icon={ShoppingCart}
+            />
+          </div>
+
+          {/* Stats Grid - Row 2 (New KPIs) */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              title="Today's Net Profit"
+              value={formatCurrency(stats.netProfit)}
+              icon={TrendingUp}
+              trend={
+                stats.netProfit >= 0
+                  ? {
+                      value: Math.abs(Math.round((stats.netProfit / (stats.todaySales || 1)) * 100)),
+                      isPositive: true,
+                      label: "profit margin",
+                    }
+                  : {
+                      value: Math.abs(Math.round((stats.netProfit / (stats.todaySales || 1)) * 100)),
+                      isPositive: false,
+                      label: "loss",
+                    }
+              }
+            />
+            <StatCard
+              title="Out of Stock Items"
+              value={stats.outOfStockCount.toLocaleString()}
+              icon={AlertTriangle}
+              trend={
+                stats.outOfStockCount > 0
+                  ? {
+                      value: stats.outOfStockCount,
+                      isPositive: false,
+                      label: "items need restocking",
+                    }
+                  : undefined
+              }
+            />
+            <StatCard
+              title="Avg Transaction Value"
+              value={formatCurrency(stats.avgTransactionValue)}
+              icon={Zap}
+            />
+            <StatCard
+              title="Refund Rate"
+              value={`${stats.refundRate.toFixed(2)}%`}
+              icon={Percent}
+              trend={
+                stats.refundRate > 0
+                  ? {
+                      value: Math.round(stats.refundRate),
+                      isPositive: stats.refundRate < 5,
+                      label: "of transactions",
+                    }
+                  : undefined
+              }
+            />
+          </div>
+
+          {/* Inventory Value */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard
+              title="Total Inventory Value"
+              value={formatCurrency(stats.totalInventoryValue)}
+              icon={Package}
+            />
+            <StatCard
+              title="Low Stock Items"
+              value={stats.lowStockCount.toLocaleString()}
+              icon={AlertTriangle}
             />
           </div>
 
