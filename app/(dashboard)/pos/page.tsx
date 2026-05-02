@@ -85,9 +85,9 @@ export default function POSPage() {
       productId: selectedProduct.productId,
       productName: selectedProduct.productName,
       supplierName: selectedProduct.supplierName,
-      quantity: roundQuantity(parseFloat(qty), selectedProduct.measuringUnit),
+      quantity: roundQuantity(qty, String(selectedProduct.measuringUnit)),
       pricePerUnit: selectedProduct.sellingPrice,
-      measuringUnit: selectedProduct.measuringUnit,
+      measuringUnit: String(selectedProduct.measuringUnit),
       itemDiscount: 0,
       maxQuantity: selectedProduct.quantityRemaining,
     });

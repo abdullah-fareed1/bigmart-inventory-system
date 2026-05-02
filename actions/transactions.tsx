@@ -618,7 +618,7 @@ export async function searchProductsForPOS(query: string) {
           supplierName: stock.supplier.name,
           sellingPrice: Number(stock.sellingPricePerUnit),
           totalQuantityRemaining: Number(stock.quantityRemaining),
-          measuringUnit: stock.measuringUnit,
+          measuringUnit: String(stock.measuringUnit),
           imageUrl: stock.product.imageUrl,
           isActive: stock.isActive,
           representativeStockId: stock.id, // First in FIFO order
@@ -639,7 +639,7 @@ export async function searchProductsForPOS(query: string) {
       supplierName: group.supplierName,
       sellingPrice: group.sellingPrice,
       quantityRemaining: group.totalQuantityRemaining,
-      measuringUnit: group.measuringUnit,
+      measuringUnit: String(group.measuringUnit),
       imageUrl: group.imageUrl,
       isActive: group.isActive,
       isOutOfStock: group.totalQuantityRemaining <= 0,
