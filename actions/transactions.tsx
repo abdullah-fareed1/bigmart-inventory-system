@@ -562,14 +562,21 @@ export async function searchProductsForPOS(query: string) {
       return { success: true, data: [] };
     }
 
-    // Find all stocks with matching product names
+    // Find all stocks with matching product names or GRN numbers
     const stocks = await prisma.stock.findMany({
       where: {
         deletedAt: null,
-        product: {
-          deletedAt: null,
-          name: { contains: query, mode: "insensitive" },
-        },
+        OR: [
+          {
+            product: {
+              deletedAt: null,
+              name: { contains: query, mode: "insensitive" },
+            },
+          },
+          {
+            grnNumber: { contains: query, mode: "insensitive" },
+          },
+        ],
       },
       include: {
         product: {
@@ -596,6 +603,7 @@ export async function searchProductsForPOS(query: string) {
       isActive: boolean;
       // For POS, we pick the first stock ID in FIFO order for linking
       representativeStockId: string;
+      grnNumbers: string[];
     };
 
     const groupMap = new Map<GroupKey, GroupedResult>();
@@ -614,10 +622,12 @@ export async function searchProductsForPOS(query: string) {
           imageUrl: stock.product.imageUrl,
           isActive: stock.isActive,
           representativeStockId: stock.id, // First in FIFO order
+          grnNumbers: [stock.grnNumber],
         });
       } else {
         const group = groupMap.get(key)!;
         group.totalQuantityRemaining += Number(stock.quantityRemaining);
+        group.grnNumbers.push(stock.grnNumber);
         // Keep the first stock ID for linking
       }
     }
@@ -633,7 +643,86 @@ export async function searchProductsForPOS(query: string) {
       imageUrl: group.imageUrl,
       isActive: group.isActive,
       isOutOfStock: group.totalQuantityRemaining <= 0,
+      grnNumbers: group.grnNumbers,
+      isAlternative: false,
     }));
+
+    // EXHAUSTED GRN HANDLING: If GRN search found only out-of-stock batches, 
+    // show all active batches of the same product + similar products
+    const isGRNSearch = query.toUpperCase().includes("GRN");
+    const allResultsOutOfStock = results.length > 0 && results.every(r => r.isOutOfStock);
+
+    if (isGRNSearch && allResultsOutOfStock) {
+      // Get product names from the out-of-stock results
+      const productNames = results.map(r => r.productName);
+
+      // Fetch all active stocks for these products
+      const activeStocks = await prisma.stock.findMany({
+        where: {
+          deletedAt: null,
+          isActive: true,
+          quantityRemaining: { gt: 0 },
+          product: {
+            deletedAt: null,
+            name: { in: productNames },
+          },
+        },
+        include: {
+          product: {
+            select: { id: true, name: true, primaryUnit: true, imageUrl: true },
+          },
+          supplier: { select: { id: true, name: true } },
+        },
+        orderBy: [
+          { product: { name: "asc" } },
+          { suppliedDate: "asc" },
+        ],
+      });
+
+      // Group active stocks by (productId, supplierId, sellingPrice)
+      const activeGroupMap = new Map<GroupKey, GroupedResult>();
+
+      for (const stock of activeStocks) {
+        const key = `${stock.productId}|${stock.supplierId}|${Number(stock.sellingPricePerUnit).toFixed(2)}`;
+
+        if (!activeGroupMap.has(key)) {
+          activeGroupMap.set(key, {
+            productId: stock.product.id,
+            productName: stock.product.name,
+            supplierName: stock.supplier.name,
+            sellingPrice: Number(stock.sellingPricePerUnit),
+            totalQuantityRemaining: Number(stock.quantityRemaining),
+            measuringUnit: stock.measuringUnit,
+            imageUrl: stock.product.imageUrl,
+            isActive: stock.isActive,
+            representativeStockId: stock.id,
+            grnNumbers: [stock.grnNumber],
+          });
+        } else {
+          const group = activeGroupMap.get(key)!;
+          group.totalQuantityRemaining += Number(stock.quantityRemaining);
+          group.grnNumbers.push(stock.grnNumber);
+        }
+      }
+
+      const alternativeResults = Array.from(activeGroupMap.values()).map((group) => ({
+        stockId: group.representativeStockId,
+        productId: group.productId,
+        productName: group.productName,
+        supplierName: group.supplierName,
+        sellingPrice: group.sellingPrice,
+        quantityRemaining: group.totalQuantityRemaining,
+        measuringUnit: group.measuringUnit,
+        imageUrl: group.imageUrl,
+        isActive: group.isActive,
+        isOutOfStock: false,
+        grnNumbers: group.grnNumbers,
+        isAlternative: true,
+      }));
+
+      // Return out-of-stock results first, then alternatives
+      return { success: true, data: [...results, ...alternativeResults] };
+    }
 
     return { success: true, data: results };
   } catch (error) {

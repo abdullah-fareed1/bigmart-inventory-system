@@ -2,6 +2,7 @@
 "use client";
 
 import { create } from "zustand";
+import { roundQuantity, getMinimumQuantity } from "@/lib/utils";
 
 export interface CartItem {
   stockId: string;
@@ -66,19 +67,22 @@ export const useCart = create<CartStore>((set, get) => ({
 
   updateQuantity: (stockId, qty) => {
     set((state) => ({
-      items: state.items.map((i) =>
-        i.stockId === stockId
-          ? {
-              ...i,
-              quantity: Math.min(Math.max(0.01, qty), i.maxQuantity),
-              // Reset item discount if it exceeds new line total
-              itemDiscount: Math.min(
-                i.itemDiscount,
-                parseFloat((qty * i.pricePerUnit).toFixed(2))
-              ),
-            }
-          : i
-      ),
+      items: state.items.map((i) => {
+        if (i.stockId === stockId) {
+          const rounded = roundQuantity(qty, i.measuringUnit);
+          const newQty = Math.min(Math.max(0.01, rounded), i.maxQuantity);
+          return {
+            ...i,
+            quantity: newQty,
+            // Reset item discount if it exceeds new line total
+            itemDiscount: Math.min(
+              i.itemDiscount,
+              parseFloat((newQty * i.pricePerUnit).toFixed(2))
+            ),
+          };
+        }
+        return i;
+      }),
     }));
   },
 

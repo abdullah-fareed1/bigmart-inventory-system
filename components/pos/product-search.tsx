@@ -15,6 +15,7 @@ interface SearchResult {
   stockId: string;
   productId: string;
   productName: string;
+  grnNumbers: string[];
   supplierName: string;
   sellingPrice: number;
   quantityRemaining: number;
@@ -22,6 +23,7 @@ interface SearchResult {
   imageUrl: string | null;
   isActive: boolean;
   isOutOfStock: boolean;
+  isAlternative?: boolean;
 }
 
 interface ProductSearchProps {
@@ -39,6 +41,7 @@ export function ProductSearch({ onSelect, searchRef }: ProductSearchProps) {
   const inputRef = searchRef || internalRef;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const debounceRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const lastKeyTime = useRef<number>(0);
 
   const search = useCallback(async (searchQuery: string) => {
     if (searchQuery.trim().length === 0) {
@@ -81,6 +84,8 @@ export function ProductSearch({ onSelect, searchRef }: ProductSearchProps) {
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
+      lastKeyTime.current = Date.now();
+
       if (!isOpen || results.length === 0) return;
 
       // Filter available items for navigation
@@ -100,15 +105,35 @@ export function ProductSearch({ onSelect, searchRef }: ProductSearchProps) {
         const prevPos =
           currentPos > 0 ? currentPos - 1 : availableIndices.length - 1;
         setSelectedIndex(availableIndices[prevPos]);
-      } else if (e.key === "Enter" && selectedIndex >= 0) {
-        e.preventDefault();
-        handleSelect(results[selectedIndex]);
+      } else if (e.key === "Enter") {
+        const now = Date.now();
+        const timeSinceLast = now - lastKeyTime.current;
+        const isScanner = timeSinceLast < 50 && query.length > 5;
+
+        if (isScanner) {
+          // Scanner detection: find exact GRN match
+          const exactMatch = results.find(
+            (r) => !r.isOutOfStock && r.grnNumbers.includes(query)
+          );
+          if (exactMatch) {
+            e.preventDefault();
+            handleSelect(exactMatch);
+            return;
+          }
+          // If no exact GRN match found, fall through to normal Enter behaviour below
+        }
+
+        // Normal Enter key behaviour — select highlighted item from dropdown
+        if (selectedIndex >= 0) {
+          e.preventDefault();
+          handleSelect(results[selectedIndex]);
+        }
       } else if (e.key === "Escape") {
         setIsOpen(false);
         setSelectedIndex(-1);
       }
     },
-    [isOpen, results, selectedIndex, handleSelect]
+    [isOpen, results, selectedIndex, handleSelect, query]
   );
 
   // Close dropdown when clicking outside
@@ -155,60 +180,73 @@ export function ProductSearch({ onSelect, searchRef }: ProductSearchProps) {
               </div>
             ) : (
               <div className="p-1">
-                {results.map((item, index) => (
-                  <button
-                    key={item.stockId}
-                    onClick={() => handleSelect(item)}
-                    disabled={item.isOutOfStock}
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-sm px-3 py-2.5 text-left text-sm transition-colors",
-                      selectedIndex === index && !item.isOutOfStock
-                        ? "bg-accent text-accent-foreground"
-                        : "hover:bg-accent/50",
-                      item.isOutOfStock &&
-                        "opacity-50 cursor-not-allowed"
-                    )}
-                  >
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
-                      <Package className="h-5 w-5 text-muted-foreground" />
-                    </div>
+                {results.map((item, index) => {
+                  // Check if this is the first alternative result
+                  const isFirstAlternative = item.isAlternative && 
+                    (index === 0 || !results[index - 1].isAlternative);
+                  
+                  return (
+                    <div key={item.stockId}>
+                      {isFirstAlternative && (
+                        <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase border-t border-b bg-muted/30">
+                          Similar Active Products
+                        </div>
+                      )}
+                      <button
+                        onClick={() => handleSelect(item)}
+                        disabled={item.isOutOfStock}
+                        className={cn(
+                          "flex w-full items-center gap-3 rounded-sm px-3 py-2.5 text-left text-sm transition-colors",
+                          selectedIndex === index && !item.isOutOfStock
+                            ? "bg-accent text-accent-foreground"
+                            : "hover:bg-accent/50",
+                          item.isOutOfStock &&
+                            "opacity-50 cursor-not-allowed",
+                          item.isAlternative && "bg-blue-50/30 hover:bg-blue-50/50"
+                        )}
+                      >
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-muted">
+                          <Package className="h-5 w-5 text-muted-foreground" />
+                        </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span
-                          className={cn(
-                            "font-medium truncate",
-                            item.isOutOfStock && "line-through"
-                          )}
-                        >
-                          {item.productName}
-                        </span>
-                        <span className="text-muted-foreground text-xs truncate">
-                          ({item.supplierName})
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                        <span>
-                          {formatCurrency(item.sellingPrice)}/{item.measuringUnit}
-                        </span>
-                        <span>•</span>
-                        <span>
-                          Stock: {formatQuantity(item.quantityRemaining, item.measuringUnit)}
-                        </span>
-                      </div>
-                    </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={cn(
+                                "font-medium truncate",
+                                item.isOutOfStock && "line-through"
+                              )}
+                            >
+                              {item.productName}
+                            </span>
+                            <span className="text-muted-foreground text-xs truncate">
+                              ({item.supplierName})
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                            <span>
+                              {formatCurrency(item.sellingPrice)}/{item.measuringUnit}
+                            </span>
+                            <span>•</span>
+                            <span>
+                              Stock: {formatQuantity(item.quantityRemaining, item.measuringUnit)}
+                            </span>
+                          </div>
+                        </div>
 
-                    {item.isOutOfStock ? (
-                      <Badge variant="destructive" className="shrink-0 text-xs">
-                        OUT OF STOCK
-                      </Badge>
-                    ) : (
-                      <span className="shrink-0 font-semibold text-sm">
-                        {formatCurrency(item.sellingPrice)}
-                      </span>
-                    )}
-                  </button>
-                ))}
+                        {item.isOutOfStock ? (
+                          <Badge variant="destructive" className="shrink-0 text-xs">
+                            OUT OF STOCK
+                          </Badge>
+                        ) : (
+                          <span className="shrink-0 font-semibold text-sm">
+                            {formatCurrency(item.sellingPrice)}
+                          </span>
+                        )}
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             )}
 

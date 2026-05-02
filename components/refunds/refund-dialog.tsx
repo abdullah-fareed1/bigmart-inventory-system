@@ -30,6 +30,7 @@ import { createRefund, getAlreadyRefundedQty } from "@/actions/refunds";
 import { getShopSettings } from "@/actions/settings";
 import { printRefundReceipt } from "@/components/receipts/refund-receipt";
 import { formatCurrency, formatQuantity } from "@/lib/format";
+import { getIncrementStep, getMinimumQuantity } from "@/lib/utils";
 import { toast } from "sonner";
 
 // ─── Types ─────────────────────────────────────────────────────────────────
@@ -362,8 +363,8 @@ export function RefundDialog({
                           <div className="flex gap-1 mt-1">
                             <Input
                               type="number"
-                              step="0.01"
-                              min="0.01"
+                              step={getIncrementStep(item.measuringUnit)}
+                              min={getMinimumQuantity(item.measuringUnit)}
                               max={state.availableQty}
                               value={state.quantityToReturn}
                               onChange={(e) =>

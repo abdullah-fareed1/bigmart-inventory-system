@@ -6,6 +6,7 @@ import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useCart } from "@/hooks/use-cart";
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts";
+import { roundQuantity, getIncrementStep, getMinimumQuantity } from "@/lib/utils";
 import { ProductSearch } from "@/components/pos/product-search";
 import { Cart } from "@/components/pos/cart";
 import { CheckoutDialog } from "@/components/pos/checkout-dialog";
@@ -84,7 +85,7 @@ export default function POSPage() {
       productId: selectedProduct.productId,
       productName: selectedProduct.productName,
       supplierName: selectedProduct.supplierName,
-      quantity: parseFloat(qty.toFixed(2)),
+      quantity: roundQuantity(parseFloat(qty), selectedProduct.measuringUnit),
       pricePerUnit: selectedProduct.sellingPrice,
       measuringUnit: selectedProduct.measuringUnit,
       itemDiscount: 0,
@@ -287,8 +288,8 @@ export default function POSPage() {
                 </label>
                 <input
                   type="number"
-                  step="0.01"
-                  min="0.01"
+                  step={getIncrementStep(selectedProduct.measuringUnit)}
+                  min={getMinimumQuantity(selectedProduct.measuringUnit)}
                   max={selectedProduct.quantityRemaining}
                   value={quantityInput}
                   onChange={(e) => setQuantityInput(e.target.value)}

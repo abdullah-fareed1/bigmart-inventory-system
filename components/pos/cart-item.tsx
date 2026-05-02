@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CartItem as CartItemType, useCart } from "@/hooks/use-cart";
 import { formatCurrency } from "@/lib/format";
+import { getIncrementStep, roundQuantity, getMinimumQuantity } from "@/lib/utils";
 import { useState } from "react";
 
 interface CartItemProps {
@@ -24,7 +25,8 @@ export function CartItemRow({ item, onDiscountClick }: CartItemProps) {
   const handleQtyBlur = () => {
     const val = parseFloat(qtyInput);
     if (!isNaN(val) && val > 0) {
-      updateQuantity(item.stockId, parseFloat(val.toFixed(2)));
+      const rounded = roundQuantity(val, item.measuringUnit);
+      updateQuantity(item.stockId, rounded);
     } else {
       setQtyInput(String(item.quantity));
     }
@@ -60,8 +62,13 @@ export function CartItemRow({ item, onDiscountClick }: CartItemProps) {
             variant="outline"
             size="icon"
             className="h-7 w-7"
-            onClick={() => updateQuantity(item.stockId, item.quantity - 1)}
-            disabled={item.quantity <= 0.01}
+            onClick={() => {
+              const step = getIncrementStep(item.measuringUnit);
+              const minQty = getMinimumQuantity(item.measuringUnit);
+              const newQty = Math.max(minQty, item.quantity - step);
+              updateQuantity(item.stockId, roundQuantity(newQty, item.measuringUnit));
+            }}
+            disabled={item.quantity <= getMinimumQuantity(item.measuringUnit)}
           >
             <Minus className="h-3 w-3" />
           </Button>
@@ -91,7 +98,11 @@ export function CartItemRow({ item, onDiscountClick }: CartItemProps) {
             variant="outline"
             size="icon"
             className="h-7 w-7"
-            onClick={() => updateQuantity(item.stockId, item.quantity + 1)}
+            onClick={() => {
+              const step = getIncrementStep(item.measuringUnit);
+              const newQty = Math.min(item.maxQuantity, item.quantity + step);
+              updateQuantity(item.stockId, roundQuantity(newQty, item.measuringUnit));
+            }}
             disabled={item.quantity >= item.maxQuantity}
           >
             <Plus className="h-3 w-3" />

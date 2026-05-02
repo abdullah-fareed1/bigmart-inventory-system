@@ -12,13 +12,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, ArrowLeft, Printer, CreditCard } from "lucide-react";
+import { Loader2, ArrowLeft, Printer, CreditCard, Tag } from "lucide-react";
 import { toast } from "sonner";
 import { formatCurrency, formatDateTime, formatDate, formatQuantity } from "@/lib/format";
 import { getSupplierBillById, recordBillPayment } from "@/actions/supplier-bills";
 import { getAvailableCredit } from "@/actions/credit-notes";
 import { printBillGRN } from "@/components/receipts/bill-grn-receipt";
 import { getShopSettings } from "@/actions/settings";
+import { PrintLabelsDialog } from "@/components/shared/print-labels-dialog";
 
 export default function SupplierBillDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -26,6 +27,7 @@ export default function SupplierBillDetailPage({ params }: { params: Promise<{ i
 
   const [bill, setBill] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showLabelDialog, setShowLabelDialog] = useState(false);
   const [availableCredit, setAvailableCredit] = useState(0);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [paymentLoading, setPaymentLoading] = useState(false);
@@ -165,6 +167,10 @@ export default function SupplierBillDetailPage({ params }: { params: Promise<{ i
           <Button variant="outline" size="sm" onClick={handlePrintGRN}>
             <Printer className="mr-2 h-4 w-4" />
             Print Bill GRN
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowLabelDialog(true)}>
+            <Tag className="mr-2 h-4 w-4" />
+            Print Labels
           </Button>
           {!isPaid && (
             <Button size="sm" onClick={() => setShowPaymentDialog(true)}>
@@ -465,6 +471,20 @@ export default function SupplierBillDetailPage({ params }: { params: Promise<{ i
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ─── Print Labels Dialog ────────────────────────────── */}
+      {bill && (
+        <PrintLabelsDialog
+          open={showLabelDialog}
+          onOpenChange={setShowLabelDialog}
+          items={(bill.stocks ?? []).map((stock: any) => ({
+            grnNumber: stock.grnNumber,
+            productName: stock.product.name,
+            sellingPricePerUnit: stock.sellingPricePerUnit,
+            measuringUnit: stock.measuringUnit,
+          }))}
+        />
+      )}
     </div>
   );
 }

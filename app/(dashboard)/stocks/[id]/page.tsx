@@ -47,6 +47,7 @@ import {
   CreditCard,
   Undo2,
   FileText,
+  Tag,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -62,6 +63,7 @@ import { getShopSettings } from "@/actions/settings";
 import { formatCurrency, formatDateTime, formatDate, formatQuantity } from "@/lib/format";
 import { printGRN } from "@/components/receipts/grn-receipt";
 import { printSupplierReturn } from "@/components/receipts/supplier-return-receipt";
+import { PrintLabelsDialog } from "@/components/shared/print-labels-dialog";
 
 // ─── Helpers ─────────────────────────────────────────────────────
 
@@ -103,6 +105,7 @@ export default function StockDetailPage() {
 
   const [stock, setStock] = useState<StockDetail | null>(null);
   const [loading, setLoading] = useState(true);
+  const [showLabelDialog, setShowLabelDialog] = useState(false);
   const [relatedStocks, setRelatedStocks] = useState<
     Array<{
       id: string;
@@ -344,6 +347,9 @@ export default function StockDetailPage() {
         <div className="flex gap-2 flex-wrap">
           <Button variant="outline" onClick={handlePrintGRN}>
             <Printer className="mr-2 h-4 w-4" /> Print GRN
+          </Button>
+          <Button variant="outline" onClick={() => setShowLabelDialog(true)}>
+            <Tag className="mr-2 h-4 w-4" /> Print Labels
           </Button>
           {stock.supplierBillId ? (
             <Button
@@ -793,6 +799,20 @@ export default function StockDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* ─── Print Labels Dialog ────────────────────────────── */}
+      {stock && (
+        <PrintLabelsDialog
+          open={showLabelDialog}
+          onOpenChange={setShowLabelDialog}
+          items={[{
+            grnNumber: stock.grnNumber,
+            productName: stock.product.name,
+            sellingPricePerUnit: stock.sellingPricePerUnit,
+            measuringUnit: stock.measuringUnit,
+          }]}
+        />
+      )}
     </div>
   );
 }
