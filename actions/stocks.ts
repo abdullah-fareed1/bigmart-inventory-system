@@ -26,6 +26,12 @@ const returnStockSchema = z.object({
   notes: z.string().optional(),
 });
 
+const updateStockSchema = z.object({
+  stockId: z.string().min(1),
+  externalBarcode: z.string().optional(),
+  notes: z.string().optional(),
+});
+
 // ─── Serialization ──────────────────────────────────────────────
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -430,6 +436,41 @@ export async function getStockById(id: string) {
       totalReturnedQty: parseFloat(totalReturnedQty.toFixed(2)),
     },
   };
+}
+
+export async function updateStock(input: z.infer<typeof updateStockSchema>) {
+  try {
+    const parsed = updateStockSchema.safeParse(input);
+    if (!parsed.success) {
+      return { success: false, error: parsed.error.issues[0].message };
+    }
+
+    const { stockId, externalBarcode, notes } = parsed.data;
+
+    // Verify stock exists
+    const stock = await prisma.stock.findUnique({ where: { id: stockId } });
+    if (!stock) {
+      return { success: false, error: "Stock not found" };
+    }
+
+    // Update the stock
+    const updated = await prisma.stock.update({
+      where: { id: stockId },
+      data: {
+        ...(externalBarcode !== undefined && { externalBarcode: externalBarcode || null }),
+        ...(notes !== undefined && { notes: notes || null }),
+      },
+    });
+
+    // Revalidate stock pages
+    revalidatePath("/stocks");
+    revalidatePath(`/stocks/${stockId}`);
+
+    return { success: true, data: serializeStock(updated) };
+  } catch (error) {
+    console.error("Error updating stock:", error);
+    return { success: false, error: "Failed to update stock" };
+  }
 }
 
 /**

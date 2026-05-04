@@ -190,6 +190,7 @@ model SupplierBillPayment {
 model Stock {
   id        String @id @default(cuid())
   grnNumber String @unique
+  externalBarcode String?
 
   productId  String
   product    Product  @relation(fields: [productId], references: [id])

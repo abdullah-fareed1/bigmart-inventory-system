@@ -32,6 +32,7 @@ export type SupplierBillFormData = {
     measuringUnit: string;
     buyingPricePerUnit: number;
     sellingPricePerUnit: number;
+    externalBarcode?: string;
     notes?: string;
   }[];
   paymentStatus: "PAID" | "PARTIAL" | "UNPAID";
@@ -103,6 +104,7 @@ export function SupplierBillForm({
       measuringUnit: "",
       buyingPricePerUnit: 0,
       sellingPricePerUnit: 0,
+      externalBarcode: "",
       notes: "",
     },
   ]);
@@ -182,6 +184,7 @@ export function SupplierBillForm({
         measuringUnit: "",
         buyingPricePerUnit: 0,
         sellingPricePerUnit: 0,
+        externalBarcode: "",
         notes: "",
       },
     ]);
@@ -196,6 +199,7 @@ export function SupplierBillForm({
       measuringUnit: "",
       buyingPricePerUnit: 0,
       sellingPricePerUnit: 0,
+      externalBarcode: "",
       notes: "",
     }] : newItems);
   };
@@ -332,6 +336,7 @@ export function SupplierBillForm({
               <TableRow>
                 <TableHead className="w-[200px]">Product</TableHead>
                 <TableHead className="w-[130px]">Unit</TableHead>
+                <TableHead className="w-[120px]">External Barcode</TableHead>
                 <TableHead className="w-[90px] text-right">Qty</TableHead>
                 <TableHead className="w-[120px] text-right">Buy Price</TableHead>
                 <TableHead className="w-[120px] text-right">Sell Price</TableHead>
@@ -391,6 +396,20 @@ export function SupplierBillForm({
                           {errors[`unit_${index}`]}
                         </p>
                       )}
+                    </TableCell>
+                    <TableCell className="w-[120px] p-2">
+                      <Input
+                        placeholder="Optional barcode..."
+                        className="w-full text-sm"
+                        value={item.externalBarcode || ""}
+                        onChange={(e) =>
+                          handleLineItemChange(
+                            index,
+                            "externalBarcode",
+                            e.target.value
+                          )
+                        }
+                      />
                     </TableCell>
                     <TableCell className="w-[90px] p-2">
                       <Input

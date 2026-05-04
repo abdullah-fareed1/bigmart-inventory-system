@@ -13,6 +13,7 @@ const billLineItemSchema = z.object({
   measuringUnit: z.string().min(1, "Measuring unit is required"),
   buyingPricePerUnit: z.number().positive("Buying price must be greater than 0"),
   sellingPricePerUnit: z.number().positive("Selling price must be greater than 0"),
+  externalBarcode: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -201,6 +202,7 @@ export async function createSupplierBill(
       buyingPricePerUnit: number;
       sellingPricePerUnit: number;
       lineCost: number;
+      externalBarcode?: string;
       notes?: string;
     }> = [];
 
@@ -303,6 +305,7 @@ export async function createSupplierBill(
         const stock = await tx.stock.create({
           data: {
             grnNumber,
+            externalBarcode: item.externalBarcode ?? null,
             productId: item.productId,
             supplierId: input.supplierId,
             supplierBillId: bill.id,

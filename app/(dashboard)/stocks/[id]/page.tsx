@@ -56,6 +56,7 @@ import {
   recordStockPayment,
   returnStockToSupplier,
   getRelatedStocks,
+  updateStock,
   type StockDetail,
 } from "@/actions/stocks";
 import { getAvailableCredit } from "@/actions/credit-notes";
@@ -135,6 +136,11 @@ export default function StockDetailPage() {
   const [returnQuantity, setReturnQuantity] = useState("");
   const [returnReason, setReturnReason] = useState("DAMAGED");
   const [refundMethod, setRefundMethod] = useState("CREDIT_NOTE");
+
+  // Barcode edit
+  const [editingBarcode, setEditingBarcode] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState(stock?.externalBarcode || "");
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
   // Update default refund method when stock loads
   useEffect(() => {
     if (stock && stock.paymentStatus !== "PAID") {
@@ -171,6 +177,35 @@ export default function StockDetailPage() {
   }, [stockId, router]);
 
   useEffect(() => { fetchStock(); }, [fetchStock]);
+
+  // Update barcode when stock loads
+  useEffect(() => {
+    if (stock) {
+      setBarcodeInput(stock.externalBarcode || "");
+    }
+  }, [stock]);
+
+  // ── Update External Barcode ────────────────────────────────
+  const handleSaveBarcode = async () => {
+    setBarcodeLoading(true);
+    try {
+      const result = await updateStock({
+        stockId,
+        externalBarcode: barcodeInput || undefined,
+      });
+      if (!result.success) {
+        toast.error(result.error || "Failed to update barcode");
+        return;
+      }
+      toast.success("External barcode updated successfully");
+      setEditingBarcode(false);
+      fetchStock();
+    } catch {
+      toast.error("Failed to update barcode");
+    } finally {
+      setBarcodeLoading(false);
+    }
+  };
 
   // Fetch available credit when opening payment dialog
   const openPaymentDialog = async () => {
@@ -382,6 +417,59 @@ export default function StockDetailPage() {
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">Product</span><span className="font-medium">{stock.product.name}</span></div>
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">Supplier</span><span>{stock.supplier.name}</span></div>
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">Date Received</span><span>{formatDateTime(stock.suppliedDate)}</span></div>
+            
+            {/* External Barcode - Editable */}
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">External Barcode</span>
+              {editingBarcode ? (
+                <div className="flex gap-2 items-center">
+                  <Input
+                    type="text"
+                    placeholder="Enter barcode..."
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    className="h-8 w-40"
+                  />
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={handleSaveBarcode}
+                    disabled={barcodeLoading}
+                  >
+                    {barcodeLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setEditingBarcode(false);
+                      setBarcodeInput(stock.externalBarcode || "");
+                    }}
+                    disabled={barcodeLoading}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex gap-2 items-center">
+                  <span className="font-mono text-sm">
+                    {stock.externalBarcode ? (
+                      <Badge variant="secondary">{stock.externalBarcode}</Badge>
+                    ) : (
+                      <span className="text-muted-foreground italic">Not set</span>
+                    )}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setEditingBarcode(true)}
+                  >
+                    Edit
+                  </Button>
+                </div>
+              )}
+            </div>
+            
             <Separator />
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">Qty Added</span><span>{formatQuantity(stock.quantityAdded, stock.measuringUnit)}</span></div>
             {totalReturnedQty > 0 && (<div className="flex justify-between text-sm"><span className="text-muted-foreground">Qty Returned</span><span className="text-destructive">-{formatQuantity(totalReturnedQty, stock.measuringUnit)}</span></div>)}

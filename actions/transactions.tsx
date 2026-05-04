@@ -562,7 +562,7 @@ export async function searchProductsForPOS(query: string) {
       return { success: true, data: [] };
     }
 
-    // Find all stocks with matching product names or GRN numbers
+    // Find all stocks with matching product names, GRN numbers, or external barcodes
     const stocks = await prisma.stock.findMany({
       where: {
         deletedAt: null,
@@ -575,6 +575,9 @@ export async function searchProductsForPOS(query: string) {
           },
           {
             grnNumber: { contains: query, mode: "insensitive" },
+          },
+          {
+            externalBarcode: { contains: query, mode: "insensitive" },
           },
         ],
       },

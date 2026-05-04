@@ -49,6 +49,7 @@ const stockFormSchema = z.object({
   sellingPricePerUnit: z
     .number({ message: "Selling price is required" })
     .positive("Selling price must be greater than 0"),
+  externalBarcode: z.string().optional(),
   paymentStatus: z.enum(["PAID", "UNPAID", "PARTIAL"]),
   amountPaid: z.number().min(0).optional(),
   notes: z.string().optional(),
@@ -135,6 +136,7 @@ export function StockForm({
       measuringUnit: "",
       buyingPricePerUnit: undefined,
       sellingPricePerUnit: undefined,
+      externalBarcode: "",
       paymentStatus: "UNPAID",
       amountPaid: 0,
       notes: "",
@@ -427,6 +429,31 @@ export function StockForm({
             )}
           />
         </div>
+
+        {/* External Barcode */}
+        <FormField
+          control={form.control}
+          name="externalBarcode"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>External Barcode (optional)</FormLabel>
+              <FormControl>
+                <Input
+                  placeholder="Enter barcode number..."
+                  value={field.value ?? ""}
+                  onChange={field.onChange}
+                  onBlur={field.onBlur}
+                  name={field.name}
+                  ref={field.ref}
+                />
+              </FormControl>
+              <FormDescription>
+                Optional barcode for searching in POS (works like GRN number)
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         {/* Prices */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
