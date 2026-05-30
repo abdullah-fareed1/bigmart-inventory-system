@@ -136,7 +136,7 @@ export function StockForm({
   const [isMergeChecking, setIsMergeChecking] = useState(false);
 
   const form = useForm<z.infer<typeof stockFormSchema>>({
-    resolver: zodResolver(stockFormSchema),
+    resolver: zodResolver(stockFormSchema) as any,
     defaultValues: {
       productId: "",
       supplierId: "",

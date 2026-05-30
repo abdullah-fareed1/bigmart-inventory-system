@@ -309,6 +309,10 @@ export async function createTransaction(input: {
       measuringUnit: string;
       pricePerUnit: number;
       deductions: Array<{ stockId: string; quantity: number }>;
+      // Dual-unit selling metadata
+      isSplitMode?: boolean;
+      splitUnitName?: string | null;
+      splitUnitsPerWhole?: number | null;
     }> = [];
 
     for (const item of validated.items) {

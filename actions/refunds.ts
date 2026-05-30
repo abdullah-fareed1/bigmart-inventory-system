@@ -175,8 +175,9 @@ export async function createRefund(input: CreateRefundInput) {
     );
 
     let actualPointsDeducted = 0;
+    let customer: any = null;
     if (transaction.customerPhone && rawPointsToDeduct > 0) {
-      const customer = await prisma.customer.findUnique({
+      customer = await prisma.customer.findUnique({
         where: { phoneNumber: transaction.customerPhone },
       });
       if (customer) {
@@ -237,7 +238,7 @@ export async function createRefund(input: CreateRefundInput) {
           const restockAmount =
             transactionItem?.soldInSplitUnit &&
             transactionItem.splitUnitsPerWhole != null &&
-            transactionItem.splitUnitsPerWhole > 0
+            Number(transactionItem.splitUnitsPerWhole) > 0
               ? parseFloat(
                   (
                     item.quantityReturned /
@@ -266,13 +267,13 @@ export async function createRefund(input: CreateRefundInput) {
         );
 
         await prisma.customer.update({
-          where: { phoneNumber: transaction.customerPhone },
+          where: { phoneNumber: customer.phoneNumber },
           data: { totalPoints: newPoints },
         });
 
         await prisma.customerPoint.create({
           data: {
-            customerPhone: transaction.customerPhone,
+            customerPhone: customer.phoneNumber,
             transactionId: input.transactionId,
             pointsChange: -actualPointsDeducted,
             reason: `REFUND (${refundNumber})`,

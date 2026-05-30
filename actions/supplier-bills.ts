@@ -211,6 +211,11 @@ export async function createSupplierBill(
       lineCost: number;
       externalBarcode?: string;
       notes?: string;
+      // Dual-unit selling
+      canBeSplit?: boolean;
+      splitUnit?: string;
+      unitsPerWhole?: number;
+      splitSellingPrice?: number;
     }> = [];
 
     for (const item of input.items) {
