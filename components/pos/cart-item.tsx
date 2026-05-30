@@ -11,7 +11,7 @@ import { useState } from "react";
 
 interface CartItemProps {
   item: CartItemType;
-  onDiscountClick: (stockId: string) => void;
+  onDiscountClick: (cartKey: string) => void;
 }
 
 export function CartItemRow({ item, onDiscountClick }: CartItemProps) {
@@ -26,7 +26,7 @@ export function CartItemRow({ item, onDiscountClick }: CartItemProps) {
     const val = parseFloat(qtyInput);
     if (!isNaN(val) && val > 0) {
       const rounded = roundQuantity(val, item.measuringUnit);
-      updateQuantity(item.stockId, rounded);
+      updateQuantity(item.cartKey, rounded);
     } else {
       setQtyInput(String(item.quantity));
     }
@@ -48,7 +48,7 @@ export function CartItemRow({ item, onDiscountClick }: CartItemProps) {
           variant="ghost"
           size="icon"
           className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
-          onClick={() => removeItem(item.stockId)}
+          onClick={() => removeItem(item.cartKey)}
         >
           <Trash2 className="h-3.5 w-3.5" />
         </Button>
@@ -66,7 +66,7 @@ export function CartItemRow({ item, onDiscountClick }: CartItemProps) {
               const step = getIncrementStep(item.measuringUnit);
               const minQty = getMinimumQuantity(item.measuringUnit);
               const newQty = Math.max(minQty, item.quantity - step);
-              updateQuantity(item.stockId, roundQuantity(newQty, item.measuringUnit));
+              updateQuantity(item.cartKey, roundQuantity(newQty, item.measuringUnit));
             }}
             disabled={item.quantity <= getMinimumQuantity(item.measuringUnit)}
           >
@@ -101,7 +101,7 @@ export function CartItemRow({ item, onDiscountClick }: CartItemProps) {
             onClick={() => {
               const step = getIncrementStep(item.measuringUnit);
               const newQty = Math.min(item.maxQuantity, item.quantity + step);
-              updateQuantity(item.stockId, roundQuantity(newQty, item.measuringUnit));
+              updateQuantity(item.cartKey, roundQuantity(newQty, item.measuringUnit));
             }}
             disabled={item.quantity >= item.maxQuantity}
           >
@@ -114,7 +114,7 @@ export function CartItemRow({ item, onDiscountClick }: CartItemProps) {
           variant="ghost"
           size="sm"
           className="h-7 px-2 text-xs"
-          onClick={() => onDiscountClick(item.stockId)}
+          onClick={() => onDiscountClick(item.cartKey)}
         >
           <Percent className="h-3 w-3 mr-1" />
           {item.itemDiscount > 0

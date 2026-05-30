@@ -18,19 +18,19 @@ import { formatCurrency } from "@/lib/format";
 interface ItemDiscountDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  stockId: string | null;
+  cartKey: string | null;
 }
 
 export function ItemDiscountDialog({
   open,
   onOpenChange,
-  stockId,
+  cartKey,
 }: ItemDiscountDialogProps) {
   const { items, updateItemDiscount } = useCart();
   const [discountAmount, setDiscountAmount] = useState("");
   const [discountPercent, setDiscountPercent] = useState("");
 
-  const item = items.find((i) => i.stockId === stockId);
+  const item = items.find((i) => i.cartKey === cartKey);
   const lineGross = item ? item.quantity * item.pricePerUnit : 0;
 
   useEffect(() => {
@@ -67,15 +67,15 @@ export function ItemDiscountDialog({
   };
 
   const handleApply = () => {
-    if (!stockId) return;
+    if (!cartKey) return;
     const amount = parseFloat(discountAmount) || 0;
-    updateItemDiscount(stockId, parseFloat(amount.toFixed(2)));
+    updateItemDiscount(cartKey, parseFloat(amount.toFixed(2)));
     onOpenChange(false);
   };
 
   const handleClear = () => {
-    if (!stockId) return;
-    updateItemDiscount(stockId, 0);
+    if (!cartKey) return;
+    updateItemDiscount(cartKey, 0);
     setDiscountAmount("");
     setDiscountPercent("");
     onOpenChange(false);

@@ -13,11 +13,33 @@ const createTransactionSchema = z.object({
   customerPhone: z.string().optional().nullable(),
   items: z
     .array(
-      z.object({
-        stockId: z.string().min(1),
-        quantity: z.number().positive(),
-        itemDiscount: z.number().min(0),
-      })
+      z
+        .object({
+          stockId: z.string().min(1),
+          quantity: z.number().positive(),
+          itemDiscount: z.number().min(0),
+          isSplitMode: z.boolean().default(false),
+          unitsPerWhole: z.number().positive().optional(),
+          splitUnitName: z.string().optional(),
+        })
+        .superRefine((item, ctx) => {
+          if (item.isSplitMode) {
+            if (item.unitsPerWhole == null || item.unitsPerWhole <= 0) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "unitsPerWhole is required and must be greater than 0 when split mode is enabled",
+                path: ["unitsPerWhole"],
+              });
+            }
+            if (!item.splitUnitName || item.splitUnitName.trim().length === 0) {
+              ctx.addIssue({
+                code: z.ZodIssueCode.custom,
+                message: "splitUnitName is required when split mode is enabled",
+                path: ["splitUnitName"],
+              });
+            }
+          }
+        })
     )
     .min(1, "At least one item is required"),
   cartDiscount: z.number().min(0),
@@ -304,13 +326,17 @@ export async function createTransaction(input: {
         };
       }
 
+      const quantityInWholeUnits = item.isSplitMode
+        ? parseFloat((item.quantity / item.unitsPerWhole!).toFixed(6))
+        : item.quantity;
+
       // Calculate total available from all related stocks
       const totalAvailable = relatedResult.stocks.reduce(
         (sum, s) => sum + s.quantityRemaining,
         0
       );
 
-      if (totalAvailable < item.quantity) {
+      if (totalAvailable < quantityInWholeUnits) {
         return {
           success: false,
           error: `Insufficient stock for ${stock.product.name}. Available: ${totalAvailable}`,
@@ -318,7 +344,7 @@ export async function createTransaction(input: {
       }
 
       // Plan deductions in FIFO order
-      let quantityNeeded = item.quantity;
+      let quantityNeeded = quantityInWholeUnits;
       const deductions: Array<{ stockId: string; quantity: number }> = [];
 
       for (const relatedStock of relatedResult.stocks) {
@@ -340,9 +366,14 @@ export async function createTransaction(input: {
         productName: stock.product.name,
         supplierName: stock.supplier.name,
         quantity: item.quantity,
-        measuringUnit: stock.measuringUnit,
-        pricePerUnit: Number(stock.sellingPricePerUnit),
+        measuringUnit: item.isSplitMode ? item.splitUnitName! : stock.measuringUnit,
+        pricePerUnit: item.isSplitMode
+          ? Number(stock.splitSellingPrice)
+          : Number(stock.sellingPricePerUnit),
         deductions,
+        isSplitMode: item.isSplitMode,
+        splitUnitName: item.splitUnitName,
+        splitUnitsPerWhole: item.unitsPerWhole,
       });
     }
 
@@ -352,9 +383,10 @@ export async function createTransaction(input: {
 
     const itemsData = validated.items.map((item) => {
       const stock = stockMap.get(item.stockId)!;
-      const lineGross = parseFloat(
-        (item.quantity * Number(stock.sellingPricePerUnit)).toFixed(2)
-      );
+      const pricePerUnit = item.isSplitMode
+        ? Number(stock.splitSellingPrice)
+        : Number(stock.sellingPricePerUnit);
+      const lineGross = parseFloat((item.quantity * pricePerUnit).toFixed(2));
       const lineNet = parseFloat((lineGross - item.itemDiscount).toFixed(2));
 
       subtotal += lineGross;
@@ -366,10 +398,13 @@ export async function createTransaction(input: {
         productName: stock.product.name,
         supplierName: stock.supplier.name,
         quantity: item.quantity,
-        measuringUnit: stock.measuringUnit,
-        pricePerUnit: Number(stock.sellingPricePerUnit),
+        measuringUnit: item.isSplitMode ? item.splitUnitName! : stock.measuringUnit,
+        pricePerUnit,
         itemDiscount: item.itemDiscount,
         lineTotal: lineNet,
+        soldInSplitUnit: item.isSplitMode,
+        splitUnitName: item.isSplitMode ? item.splitUnitName : null,
+        splitUnitsPerWhole: item.isSplitMode ? item.unitsPerWhole : null,
       };
     });
 
@@ -593,7 +628,7 @@ export async function searchProductsForPOS(query: string) {
       ],
     });
 
-    // Group by (productId, supplierId, sellingPrice) and aggregate quantities
+    // Group by (productId, supplierId, buyingPrice, sellingPrice, splitSellingPrice, unitsPerWhole, splitUnit, canBeSplit)
     type GroupKey = string;
     type GroupedResult = {
       productId: string;
@@ -604,6 +639,10 @@ export async function searchProductsForPOS(query: string) {
       measuringUnit: string;
       imageUrl: string | null;
       isActive: boolean;
+      canBeSplit: boolean;
+      splitUnit: string | null;
+      unitsPerWhole: number | null;
+      splitSellingPrice: number | null;
       // For POS, we pick the first stock ID in FIFO order for linking
       representativeStockId: string;
       grnNumbers: string[];
@@ -612,7 +651,7 @@ export async function searchProductsForPOS(query: string) {
     const groupMap = new Map<GroupKey, GroupedResult>();
 
     for (const stock of stocks) {
-      const key = `${stock.productId}|${stock.supplierId}|${Number(stock.sellingPricePerUnit).toFixed(2)}`;
+      const key = `${stock.productId}|${stock.supplierId}|${Number(stock.sellingPricePerUnit).toFixed(2)}|${stock.splitSellingPrice != null ? Number(stock.splitSellingPrice).toFixed(2) : 'null'}|${stock.unitsPerWhole != null ? Number(stock.unitsPerWhole).toFixed(4) : 'null'}|${stock.splitUnit ?? 'null'}|${stock.canBeSplit}`;
 
       if (!groupMap.has(key)) {
         groupMap.set(key, {
@@ -624,6 +663,10 @@ export async function searchProductsForPOS(query: string) {
           measuringUnit: String(stock.measuringUnit),
           imageUrl: stock.product.imageUrl,
           isActive: stock.isActive,
+          canBeSplit: stock.canBeSplit,
+          splitUnit: stock.splitUnit,
+          unitsPerWhole: stock.unitsPerWhole != null ? Number(stock.unitsPerWhole) : null,
+          splitSellingPrice: stock.splitSellingPrice != null ? Number(stock.splitSellingPrice) : null,
           representativeStockId: stock.id, // First in FIFO order
           grnNumbers: [stock.grnNumber],
         });
@@ -635,20 +678,55 @@ export async function searchProductsForPOS(query: string) {
       }
     }
 
-    const results = Array.from(groupMap.values()).map((group) => ({
-      stockId: group.representativeStockId,
-      productId: group.productId,
-      productName: group.productName,
-      supplierName: group.supplierName,
-      sellingPrice: group.sellingPrice,
-      quantityRemaining: group.totalQuantityRemaining,
-      measuringUnit: String(group.measuringUnit),
-      imageUrl: group.imageUrl,
-      isActive: group.isActive,
-      isOutOfStock: group.totalQuantityRemaining <= 0,
-      grnNumbers: group.grnNumbers,
-      isAlternative: false,
-    }));
+    const results: Array<any> = [];
+    
+    for (const group of Array.from(groupMap.values())) {
+      // Add whole-unit row
+      results.push({
+        stockId: group.representativeStockId,
+        productId: group.productId,
+        productName: group.productName,
+        supplierName: group.supplierName,
+        sellingPrice: group.sellingPrice,
+        quantityRemaining: Math.floor(Number(group.totalQuantityRemaining)),
+        measuringUnit: String(group.measuringUnit),
+        imageUrl: group.imageUrl,
+        isActive: group.isActive,
+        isOutOfStock: Math.floor(Number(group.totalQuantityRemaining)) <= 0,
+        grnNumbers: group.grnNumbers,
+        isAlternative: false,
+        isSplitMode: false,
+        canBeSplit: group.canBeSplit,
+        splitUnit: group.splitUnit,
+        unitsPerWhole: group.unitsPerWhole,
+        splitSellingPrice: group.splitSellingPrice,
+      });
+
+      // If canBeSplit is true, also add split-unit row
+      if (group.canBeSplit && group.unitsPerWhole && group.splitSellingPrice && group.splitUnit) {
+        const splitQuantityAvailable = Number(group.totalQuantityRemaining) * group.unitsPerWhole;
+        results.push({
+          stockId: group.representativeStockId,
+          productId: group.productId,
+          productName: group.productName,
+          supplierName: group.supplierName,
+          sellingPrice: group.splitSellingPrice,
+          quantityRemaining: splitQuantityAvailable,
+          measuringUnit: group.splitUnit,
+          imageUrl: group.imageUrl,
+          isActive: group.isActive,
+          // Split row is out of stock only if totalQuantityRemaining <= 0 (not < 1)
+          isOutOfStock: Number(group.totalQuantityRemaining) <= 0,
+          grnNumbers: group.grnNumbers,
+          isAlternative: false,
+          isSplitMode: true,
+          canBeSplit: group.canBeSplit,
+          splitUnit: group.splitUnit,
+          unitsPerWhole: group.unitsPerWhole,
+          splitSellingPrice: group.splitSellingPrice,
+        });
+      }
+    }
 
     // EXHAUSTED GRN HANDLING: If GRN search found only out-of-stock batches, 
     // show all active batches of the same product + similar products
@@ -657,7 +735,7 @@ export async function searchProductsForPOS(query: string) {
 
     if (isGRNSearch && allResultsOutOfStock) {
       // Get product names from the out-of-stock results
-      const productNames = results.map(r => r.productName);
+      const productNames = [...new Set(results.map(r => r.productName))];
 
       // Fetch all active stocks for these products
       const activeStocks = await prisma.stock.findMany({
@@ -682,11 +760,11 @@ export async function searchProductsForPOS(query: string) {
         ],
       });
 
-      // Group active stocks by (productId, supplierId, sellingPrice)
+      // Group active stocks by (productId, supplierId, sellingPrice, splitSellingPrice, unitsPerWhole, canBeSplit)
       const activeGroupMap = new Map<GroupKey, GroupedResult>();
 
       for (const stock of activeStocks) {
-        const key = `${stock.productId}|${stock.supplierId}|${Number(stock.sellingPricePerUnit).toFixed(2)}`;
+        const key = `${stock.productId}|${stock.supplierId}|${Number(stock.sellingPricePerUnit).toFixed(2)}|${stock.splitSellingPrice != null ? Number(stock.splitSellingPrice).toFixed(2) : 'null'}|${stock.unitsPerWhole != null ? Number(stock.unitsPerWhole).toFixed(4) : 'null'}|${stock.splitUnit ?? 'null'}|${stock.canBeSplit}`;
 
         if (!activeGroupMap.has(key)) {
           activeGroupMap.set(key, {
@@ -698,6 +776,10 @@ export async function searchProductsForPOS(query: string) {
             measuringUnit: stock.measuringUnit,
             imageUrl: stock.product.imageUrl,
             isActive: stock.isActive,
+            canBeSplit: stock.canBeSplit,
+            splitUnit: stock.splitUnit,
+            unitsPerWhole: stock.unitsPerWhole != null ? Number(stock.unitsPerWhole) : null,
+            splitSellingPrice: stock.splitSellingPrice != null ? Number(stock.splitSellingPrice) : null,
             representativeStockId: stock.id,
             grnNumbers: [stock.grnNumber],
           });
@@ -708,20 +790,53 @@ export async function searchProductsForPOS(query: string) {
         }
       }
 
-      const alternativeResults = Array.from(activeGroupMap.values()).map((group) => ({
-        stockId: group.representativeStockId,
-        productId: group.productId,
-        productName: group.productName,
-        supplierName: group.supplierName,
-        sellingPrice: group.sellingPrice,
-        quantityRemaining: group.totalQuantityRemaining,
-        measuringUnit: group.measuringUnit,
-        imageUrl: group.imageUrl,
-        isActive: group.isActive,
-        isOutOfStock: false,
-        grnNumbers: group.grnNumbers,
-        isAlternative: true,
-      }));
+      const alternativeResults: Array<any> = [];
+      for (const group of Array.from(activeGroupMap.values())) {
+        // Add whole-unit alternative row
+        alternativeResults.push({
+          stockId: group.representativeStockId,
+          productId: group.productId,
+          productName: group.productName,
+          supplierName: group.supplierName,
+          sellingPrice: group.sellingPrice,
+          quantityRemaining: Math.floor(Number(group.totalQuantityRemaining)),
+          measuringUnit: group.measuringUnit,
+          imageUrl: group.imageUrl,
+          isActive: group.isActive,
+          isOutOfStock: false,
+          grnNumbers: group.grnNumbers,
+          isAlternative: true,
+          isSplitMode: false,
+          canBeSplit: group.canBeSplit,
+          splitUnit: group.splitUnit,
+          unitsPerWhole: group.unitsPerWhole,
+          splitSellingPrice: group.splitSellingPrice,
+        });
+
+        // If canBeSplit is true, also add split-unit alternative row
+        if (group.canBeSplit && group.unitsPerWhole && group.splitSellingPrice && group.splitUnit) {
+          const splitQuantityAvailable = Number(group.totalQuantityRemaining) * group.unitsPerWhole;
+          alternativeResults.push({
+            stockId: group.representativeStockId,
+            productId: group.productId,
+            productName: group.productName,
+            supplierName: group.supplierName,
+            sellingPrice: group.splitSellingPrice,
+            quantityRemaining: splitQuantityAvailable,
+            measuringUnit: group.splitUnit,
+            imageUrl: group.imageUrl,
+            isActive: group.isActive,
+            isOutOfStock: false,
+            grnNumbers: group.grnNumbers,
+            isAlternative: true,
+            isSplitMode: true,
+            canBeSplit: group.canBeSplit,
+            splitUnit: group.splitUnit,
+            unitsPerWhole: group.unitsPerWhole,
+            splitSellingPrice: group.splitSellingPrice,
+          });
+        }
+      }
 
       // Return out-of-stock results first, then alternatives
       return { success: true, data: [...results, ...alternativeResults] };

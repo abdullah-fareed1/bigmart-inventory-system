@@ -221,13 +221,34 @@ export async function createRefund(input: CreateRefundInput) {
 
       // 6c. Restock if requested
       if (item.isRestocked) {
-        // Fetch current stock state
-        const stock = await prisma.stock.findUnique({
-          where: { id: item.stockId },
-        });
+        // Fetch current stock state and original transaction item metadata
+        const [stock, transactionItem] = await Promise.all([
+          prisma.stock.findUnique({ where: { id: item.stockId } }),
+          prisma.transactionItem.findUnique({
+            where: { id: item.transactionItemId },
+            select: {
+              soldInSplitUnit: true,
+              splitUnitsPerWhole: true,
+            },
+          }),
+        ]);
+
         if (stock) {
+          const restockAmount =
+            transactionItem?.soldInSplitUnit &&
+            transactionItem.splitUnitsPerWhole != null &&
+            transactionItem.splitUnitsPerWhole > 0
+              ? parseFloat(
+                  (
+                    item.quantityReturned /
+                    Number(transactionItem.splitUnitsPerWhole)
+                  ).toFixed(6)
+                )
+              : item.quantityReturned;
+
           const newRemaining =
-            Number(stock.quantityRemaining) + item.quantityReturned;
+            Number(stock.quantityRemaining) + restockAmount;
+
           await prisma.stock.update({
             where: { id: item.stockId },
             data: {
@@ -237,16 +258,7 @@ export async function createRefund(input: CreateRefundInput) {
           });
         }
       }
-    }
 
-    // 6d. Deduct points from customer
-    if (
-      transaction.customerPhone &&
-      actualPointsDeducted > 0
-    ) {
-      const customer = await prisma.customer.findUnique({
-        where: { phoneNumber: transaction.customerPhone },
-      });
       if (customer) {
         const newPoints = Math.max(
           0,

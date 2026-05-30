@@ -44,6 +44,9 @@ function serializeStock<T extends Record<string, any>>(stock: T) {
     sellingPricePerUnit: Number(stock.sellingPricePerUnit),
     amountPaid: Number(stock.amountPaid),
     totalCost: Number(stock.totalCost),
+    // NEW: Dual-unit selling serialization
+    unitsPerWhole: stock.unitsPerWhole != null ? Number(stock.unitsPerWhole) : null,
+    splitSellingPrice: stock.splitSellingPrice != null ? Number(stock.splitSellingPrice) : null,
   };
 }
 
@@ -280,7 +283,7 @@ export async function getStocksGrouped(params?: {
     orderBy: { suppliedDate: "desc" },
   });
 
-  // Group by (productId, supplierId, buyingPrice, sellingPrice)
+  // Group by (productId, supplierId, buyingPrice, sellingPrice, splitSellingPrice, unitsPerWhole, splitUnit, canBeSplit)
   type GroupKey = string;
   type GroupedEntry = {
     productId: string;
@@ -290,6 +293,10 @@ export async function getStocksGrouped(params?: {
     buyingPricePerUnit: number;
     sellingPricePerUnit: number;
     measuringUnit: string;
+    canBeSplit: boolean;
+    splitUnit: string | null;
+    unitsPerWhole: number | null;
+    splitSellingPrice: number | null;
     totalQuantityAdded: number;
     totalQuantityRemaining: number;
     totalCost: number;
@@ -308,7 +315,7 @@ export async function getStocksGrouped(params?: {
   const groupMap = new Map<GroupKey, GroupedEntry>();
 
   for (const stock of allStocks) {
-    const key = `${stock.productId}|${stock.supplierId}|${Number(stock.buyingPricePerUnit).toFixed(2)}|${Number(stock.sellingPricePerUnit).toFixed(2)}`;
+    const key = `${stock.productId}|${stock.supplierId}|${Number(stock.buyingPricePerUnit).toFixed(2)}|${Number(stock.sellingPricePerUnit).toFixed(2)}|${stock.splitSellingPrice != null ? Number(stock.splitSellingPrice).toFixed(2) : 'null'}|${stock.unitsPerWhole != null ? Number(stock.unitsPerWhole).toFixed(4) : 'null'}|${stock.splitUnit ?? 'null'}|${stock.canBeSplit}`;
 
     if (!groupMap.has(key)) {
       groupMap.set(key, {
@@ -319,6 +326,10 @@ export async function getStocksGrouped(params?: {
         buyingPricePerUnit: Number(stock.buyingPricePerUnit),
         sellingPricePerUnit: Number(stock.sellingPricePerUnit),
         measuringUnit: stock.measuringUnit,
+        canBeSplit: stock.canBeSplit,
+        splitUnit: stock.splitUnit,
+        unitsPerWhole: stock.unitsPerWhole != null ? Number(stock.unitsPerWhole) : null,
+        splitSellingPrice: stock.splitSellingPrice != null ? Number(stock.splitSellingPrice) : null,
         totalQuantityAdded: 0,
         totalQuantityRemaining: 0,
         totalCost: 0,
@@ -536,6 +547,10 @@ export async function getRelatedStocksForDeduction(stockId: string) {
       supplierId: true,
       buyingPricePerUnit: true,
       sellingPricePerUnit: true,
+      splitSellingPrice: true,
+      unitsPerWhole: true,
+      splitUnit: true,
+      canBeSplit: true,
     },
   });
 
@@ -547,6 +562,9 @@ export async function getRelatedStocksForDeduction(stockId: string) {
       supplierId: stock.supplierId,
       buyingPricePerUnit: stock.buyingPricePerUnit,
       sellingPricePerUnit: stock.sellingPricePerUnit,
+      splitSellingPrice: stock.splitSellingPrice,
+      unitsPerWhole: stock.unitsPerWhole,
+      canBeSplit: stock.canBeSplit,
       deletedAt: null,
       isActive: true,
     },

@@ -24,6 +24,10 @@ interface SearchResult {
   isActive: boolean;
   isOutOfStock: boolean;
   isAlternative?: boolean;
+  isSplitMode?: boolean;
+  splitUnit?: string;
+  unitsPerWhole?: number;
+  splitSellingPrice?: number;
 }
 
 interface ProductSearchProps {
@@ -184,9 +188,10 @@ export function ProductSearch({ onSelect, searchRef }: ProductSearchProps) {
                   // Check if this is the first alternative result
                   const isFirstAlternative = item.isAlternative && 
                     (index === 0 || !results[index - 1].isAlternative);
+                  const itemKey = `${item.stockId}-${index}`;
                   
                   return (
-                    <div key={item.stockId}>
+                    <div key={itemKey}>
                       {isFirstAlternative && (
                         <div className="px-3 py-2 text-xs font-semibold text-muted-foreground uppercase border-t border-b bg-muted/30">
                           Similar Active Products

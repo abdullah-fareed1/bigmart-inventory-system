@@ -53,6 +53,11 @@ const stockFormSchema = z.object({
   paymentStatus: z.enum(["PAID", "UNPAID", "PARTIAL"]),
   amountPaid: z.number().min(0).optional(),
   notes: z.string().optional(),
+  // NEW: Dual-unit selling
+  canBeSplit: z.boolean().default(false),
+  splitUnit: z.string().optional(),
+  unitsPerWhole: z.number().optional(),
+  splitSellingPrice: z.number().optional(),
 });
 
 export type StockFormData = z.infer<typeof stockFormSchema> & {
@@ -114,6 +119,9 @@ export function StockForm({
 }: StockFormProps) {
   const [submitting, setSubmitting] = useState(false);
 
+  // Split selling state
+  const [splitSelling, setSplitSelling] = useState(false);
+
   // Credit note state
   const [availableCredit, setAvailableCredit] = useState(0);
   const [useCredit, setUseCredit] = useState(false);
@@ -140,6 +148,10 @@ export function StockForm({
       paymentStatus: "UNPAID",
       amountPaid: 0,
       notes: "",
+      canBeSplit: false,
+      splitUnit: "",
+      unitsPerWhole: undefined,
+      splitSellingPrice: undefined,
     },
   });
 
@@ -150,6 +162,10 @@ export function StockForm({
   const watchedPaymentStatus = form.watch("paymentStatus");
   const watchedSellingPrice = form.watch("sellingPricePerUnit");
   const watchedUnit = form.watch("measuringUnit");
+  const watchedCanBeSplit = form.watch("canBeSplit");
+  const watchedSplitUnit = form.watch("splitUnit");
+  const watchedUnitsPerWhole = form.watch("unitsPerWhole");
+  const watchedSplitSellingPrice = form.watch("splitSellingPrice");
 
   // Auto-set measuring unit when product changes
   useEffect(() => {
@@ -257,6 +273,22 @@ export function StockForm({
         message: "Must be higher than buying price",
       });
       hasError = true;
+    }
+
+    // NEW: Validate split selling fields
+    if (data.canBeSplit) {
+      if (!data.splitUnit || data.splitUnit.trim().length === 0) {
+        form.setError("splitUnit", { message: "Required when split selling is enabled" });
+        hasError = true;
+      }
+      if (!data.unitsPerWhole || data.unitsPerWhole <= 0) {
+        form.setError("unitsPerWhole", { message: "Must be greater than 0" });
+        hasError = true;
+      }
+      if (!data.splitSellingPrice || data.splitSellingPrice <= 0) {
+        form.setError("splitSellingPrice", { message: "Must be greater than 0" });
+        hasError = true;
+      }
     }
 
     if (data.paymentStatus === "PARTIAL") {
@@ -508,6 +540,146 @@ export function StockForm({
             )}
           />
         </div>
+
+        {/* Split Selling Configuration */}
+        <Card>
+          <CardContent className="pt-4 space-y-4">
+            <div className="flex items-center justify-between">
+              <Label className="text-sm font-medium">Split Selling</Label>
+              <Switch
+                checked={watchedCanBeSplit}
+                onCheckedChange={(checked) => {
+                  form.setValue("canBeSplit", checked);
+                  setSplitSelling(checked);
+                  if (!checked) {
+                    form.setValue("splitUnit", "");
+                    form.setValue("unitsPerWhole", undefined);
+                    form.setValue("splitSellingPrice", undefined);
+                  }
+                }}
+              />
+            </div>
+
+            {watchedCanBeSplit && (
+              <div className="space-y-4 border-t pt-4">
+                {/* Split Unit */}
+                <FormField
+                  control={form.control}
+                  name="splitUnit"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Split Unit *</FormLabel>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value || ""}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select split unit..." />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {MEASURING_UNITS.map((unit) => (
+                            <SelectItem key={unit} value={unit}>
+                              {unit}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        e.g. YARDS, PIECES, GRAMS
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Units Per Whole */}
+                <FormField
+                  control={form.control}
+                  name="unitsPerWhole"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Units per Whole *</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.0001"
+                          min="0.0001"
+                          placeholder="0.0000"
+                          value={field.value ?? ""}
+                          onChange={handleNumberChange(field.onChange)}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        How many {watchedSplitUnit || "split units"} in 1 {watchedUnit || "whole unit"}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Split Selling Price */}
+                <FormField
+                  control={form.control}
+                  name="splitSellingPrice"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Price per {watchedSplitUnit || "Split Unit"} *</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          placeholder="0.00"
+                          value={field.value ?? ""}
+                          onChange={handleNumberChange(field.onChange)}
+                          onBlur={field.onBlur}
+                          name={field.name}
+                          ref={field.ref}
+                        />
+                      </FormControl>
+                      <FormDescription>
+                        Selling price per individual {watchedSplitUnit || "split unit"}
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Preview */}
+                {watchedUnitsPerWhole && watchedSplitSellingPrice && (
+                  <Card className="bg-muted/50 border-0">
+                    <CardContent className="pt-4 space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                        Preview
+                      </p>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">1 {watchedUnit}</span>
+                        <span className="font-medium">= {watchedUnitsPerWhole?.toFixed(4)} {watchedSplitUnit}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Whole mode</span>
+                        <span>{formatCurrency(watchedSellingPrice || 0)}/{watchedUnit}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Split mode</span>
+                        <span>{formatCurrency(watchedSplitSellingPrice)}/{watchedSplitUnit}</span>
+                      </div>
+                      <div className="flex justify-between text-sm text-blue-600 font-medium">
+                        <span>Max if fully split</span>
+                        <span>{formatCurrency((watchedUnitsPerWhole || 0) * (watchedSplitSellingPrice || 0))}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Total Cost Summary */}
         {totalCost > 0 && (

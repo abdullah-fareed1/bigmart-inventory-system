@@ -38,6 +38,10 @@ export default function POSPage() {
     sellingPrice: number;
     quantityRemaining: number;
     measuringUnit: string;
+    isSplitMode?: boolean;
+    unitsPerWhole?: number;
+    splitUnit?: string;
+    splitSellingPrice?: number;
   } | null>(null);
   const [quantityInput, setQuantityInput] = useState("1");
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
@@ -58,6 +62,10 @@ export default function POSPage() {
       sellingPrice: number;
       quantityRemaining: number;
       measuringUnit: string;
+      isSplitMode?: boolean;
+      unitsPerWhole?: number;
+      splitUnit?: string;
+      splitSellingPrice?: number;
     }) => {
       setSelectedProduct(item);
       setQuantityInput("1");
@@ -73,23 +81,39 @@ export default function POSPage() {
       toast.error("Please enter a valid quantity");
       return;
     }
-    if (qty > selectedProduct.quantityRemaining) {
+    
+    // For split mode, calculate max from unitsPerWhole
+    const isSplitMode = selectedProduct.isSplitMode === true;
+    const maxQty = isSplitMode && selectedProduct.unitsPerWhole
+      ? selectedProduct.quantityRemaining * selectedProduct.unitsPerWhole
+      : selectedProduct.quantityRemaining;
+    
+    if (qty > maxQty) {
       toast.error(
-        `Maximum available: ${selectedProduct.quantityRemaining} ${selectedProduct.measuringUnit}`
+        `Maximum available: ${maxQty} ${selectedProduct.measuringUnit}`
       );
       return;
     }
 
+    // Calculate the effective price for this mode
+    const effectivePrice = isSplitMode ? selectedProduct.splitSellingPrice! : selectedProduct.sellingPrice;
+    
+    // Generate cartKey
+    const cartKey = `${selectedProduct.stockId}:${isSplitMode ? 'split' : 'whole'}`;
+
     cart.addItem({
+      cartKey: cartKey,
       stockId: selectedProduct.stockId,
+      isSplitMode: isSplitMode,
+      unitsPerWhole: isSplitMode ? selectedProduct.unitsPerWhole : undefined,
       productId: selectedProduct.productId,
       productName: selectedProduct.productName,
       supplierName: selectedProduct.supplierName,
       quantity: roundQuantity(qty, String(selectedProduct.measuringUnit)),
-      pricePerUnit: selectedProduct.sellingPrice,
+      pricePerUnit: effectivePrice,
       measuringUnit: String(selectedProduct.measuringUnit),
       itemDiscount: 0,
-      maxQuantity: selectedProduct.quantityRemaining,
+      maxQuantity: maxQty,
     });
 
     setShowQuantityDialog(false);
@@ -338,24 +362,44 @@ export default function POSPage() {
                 <p className="font-medium">{selectedProduct.productName}</p>
                 <p className="text-sm text-muted-foreground">
                   {selectedProduct.supplierName} •{" "}
-                  {formatCurrency(selectedProduct.sellingPrice)}/
-                  {selectedProduct.measuringUnit}
+                  {formatCurrency(
+                    selectedProduct.isSplitMode 
+                      ? selectedProduct.splitSellingPrice!
+                      : selectedProduct.sellingPrice
+                  )}/
+                  {selectedProduct.isSplitMode 
+                    ? selectedProduct.splitUnit
+                    : selectedProduct.measuringUnit}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Available: {selectedProduct.quantityRemaining}{" "}
-                  {selectedProduct.measuringUnit}
+                  Available: {
+                    selectedProduct.isSplitMode && selectedProduct.unitsPerWhole
+                      ? (selectedProduct.quantityRemaining * selectedProduct.unitsPerWhole).toFixed(2)
+                      : selectedProduct.quantityRemaining
+                  }{" "}
+                  {selectedProduct.isSplitMode 
+                    ? selectedProduct.splitUnit
+                    : selectedProduct.measuringUnit}
                 </p>
               </div>
 
               <div className="space-y-2">
                 <label className="text-sm font-medium">
-                  Quantity ({selectedProduct.measuringUnit})
+                  Quantity ({selectedProduct.isSplitMode 
+                    ? selectedProduct.splitUnit
+                    : selectedProduct.measuringUnit})
                 </label>
                 <input
                   type="number"
-                  step={getIncrementStep(selectedProduct.measuringUnit)}
-                  min={getMinimumQuantity(selectedProduct.measuringUnit)}
-                  max={selectedProduct.quantityRemaining}
+                  step={getIncrementStep(selectedProduct.isSplitMode 
+                    ? selectedProduct.splitUnit!
+                    : selectedProduct.measuringUnit)}
+                  min={getMinimumQuantity(selectedProduct.isSplitMode 
+                    ? selectedProduct.splitUnit!
+                    : selectedProduct.measuringUnit)}
+                  max={selectedProduct.isSplitMode && selectedProduct.unitsPerWhole
+                    ? selectedProduct.quantityRemaining * selectedProduct.unitsPerWhole
+                    : selectedProduct.quantityRemaining}
                   value={quantityInput}
                   onChange={(e) => setQuantityInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddToCart()}
@@ -369,7 +413,9 @@ export default function POSPage() {
                 <span className="font-semibold">
                   {formatCurrency(
                     (parseFloat(quantityInput) || 0) *
-                      selectedProduct.sellingPrice
+                      (selectedProduct.isSplitMode 
+                        ? selectedProduct.splitSellingPrice!
+                        : selectedProduct.sellingPrice)
                   )}
                 </span>
               </div>

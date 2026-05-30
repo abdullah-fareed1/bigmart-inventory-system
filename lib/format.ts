@@ -81,8 +81,12 @@ export function formatCurrency(amount: number | Decimal | string): string {
  * Format a Date to the spec-required format.
  * Example: "Jan 15, 2024 2:35 PM"
  */
-export function formatDateTime(date: Date | string): string {
+export function formatDateTime(date: Date | string | null | undefined): string {
+  if (date == null) return "—";
+
   const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "—";
+
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -97,8 +101,12 @@ export function formatDateTime(date: Date | string): string {
  * Format a Date to just the date portion.
  * Example: "Jan 15, 2024"
  */
-export function formatDate(date: Date | string): string {
+export function formatDate(date: Date | string | null | undefined): string {
+  if (date == null) return "—";
+
   const d = typeof date === "string" ? new Date(date) : date;
+  if (Number.isNaN(d.getTime())) return "—";
+
   return d.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",

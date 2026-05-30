@@ -15,6 +15,11 @@ const billLineItemSchema = z.object({
   sellingPricePerUnit: z.number().positive("Selling price must be greater than 0"),
   externalBarcode: z.string().optional(),
   notes: z.string().optional(),
+  // Dual-unit selling
+  canBeSplit: z.boolean().optional(),
+  splitUnit: z.string().optional(),
+  unitsPerWhole: z.number().optional(),
+  splitSellingPrice: z.number().optional(),
 });
 
 // Schema for creating a new bill
@@ -57,6 +62,8 @@ function serializeBill<T extends Record<string, any>>(bill: T) {
       sellingPricePerUnit: Number(s.sellingPricePerUnit),
       amountPaid: Number(s.amountPaid),
       totalCost: Number(s.totalCost),
+      unitsPerWhole: s.unitsPerWhole != null ? Number(s.unitsPerWhole) : null,
+      splitSellingPrice: s.splitSellingPrice != null ? Number(s.splitSellingPrice) : null,
     })),
   };
 }
@@ -314,6 +321,11 @@ export async function createSupplierBill(
             measuringUnit: item.measuringUnit,
             buyingPricePerUnit: item.buyingPricePerUnit,
             sellingPricePerUnit: item.sellingPricePerUnit,
+            // Persist dual-unit selling metadata
+            canBeSplit: item.canBeSplit ?? false,
+            splitUnit: item.splitUnit ?? null,
+            unitsPerWhole: item.unitsPerWhole ?? null,
+            splitSellingPrice: item.splitSellingPrice ?? null,
             paymentStatus: stockPaymentStatus,
             amountPaid: stockAmountPaid,
             totalCost: item.lineCost,

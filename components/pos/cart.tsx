@@ -18,7 +18,7 @@ interface CartProps {
 
 export function Cart({ onCheckout }: CartProps) {
   const cart = useCart();
-  const [discountStockId, setDiscountStockId] = useState<string | null>(null);
+  const [discountCartKey, setDiscountCartKey] = useState<string | null>(null);
   const [showCartDiscount, setShowCartDiscount] = useState(false);
 
   const subtotal = cart.getSubtotal();
@@ -66,9 +66,9 @@ export function Cart({ onCheckout }: CartProps) {
           <div className="space-y-2">
             {cart.items.map((item) => (
               <CartItemRow
-                key={item.stockId}
+                key={item.cartKey}
                 item={item}
-                onDiscountClick={(stockId) => setDiscountStockId(stockId)}
+                onDiscountClick={(cartKey) => setDiscountCartKey(cartKey)}
               />
             ))}
           </div>
@@ -141,9 +141,9 @@ export function Cart({ onCheckout }: CartProps) {
 
       {/* Dialogs */}
       <ItemDiscountDialog
-        open={discountStockId !== null}
-        onOpenChange={(open) => !open && setDiscountStockId(null)}
-        stockId={discountStockId}
+        open={discountCartKey !== null}
+        onOpenChange={(open) => !open && setDiscountCartKey(null)}
+        cartKey={discountCartKey}
       />
       <CartDiscountDialog
         open={showCartDiscount}

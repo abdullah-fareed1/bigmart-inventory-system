@@ -228,11 +228,17 @@ export default function SupplierDetailPage() {
               ) : (
                 stocks.map((s) => {
                   const balance = Number(s.totalCost) - Number(s.amountPaid);
+                  const stockKey = `${s.productId}|${s.supplierId}|${s.buyingPricePerUnit}|${s.sellingPricePerUnit}|${s.measuringUnit}|${s.splitUnit ?? "null"}|${s.unitsPerWhole ?? "null"}|${s.canBeSplit}`;
+                  const firstStock = s.stocks[0];
                   return (
                     <TableRow
-                      key={s.id}
+                      key={stockKey}
                       className="cursor-pointer hover:bg-muted/50"
-                      onClick={() => router.push(`/stocks/${s.id}`)}
+                      onClick={() => {
+                        if (firstStock) {
+                          router.push(`/stocks/${firstStock.id}`);
+                        }
+                      }}
                     >
                       <TableCell className="font-mono text-sm">{s.grnNumber}</TableCell>
                       <TableCell>{s.product.name}</TableCell>
@@ -303,7 +309,7 @@ export default function SupplierDetailPage() {
                       <TableCell className="text-sm text-muted-foreground">
                         {formatDate(bill.billDate)}
                       </TableCell>
-                      <TableCell className="text-right">{bill.stocks.length}</TableCell>
+                      <TableCell className="text-right">{bill._count?.stocks ?? 0}</TableCell>
                       <TableCell className="text-right">{formatCurrency(totalCost)}</TableCell>
                       <TableCell className="text-right">{formatCurrency(amountPaid)}</TableCell>
                       <TableCell className={`text-right ${balanceDue > 0 ? "text-destructive font-medium" : ""}`}>

@@ -223,6 +223,12 @@ model Stock {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
+  // NEW: Dual-unit selling configuration
+  canBeSplit        Boolean   @default(false)
+  splitUnit         String?   // e.g. 'YARDS', 'PIECES', 'GRAMS'
+  unitsPerWhole     Decimal?  @db.Decimal(10, 4)  // e.g. 10.0000 yards per roll
+  splitSellingPrice Decimal?  @db.Decimal(10, 2)  // e.g. 20.00 per yard
+
   payments         StockSupplierPayment[]  // kept for standalone stock payments
   supplierReturns  SupplierReturn[]
   transactionItems TransactionItem[]
@@ -379,6 +385,11 @@ model TransactionItem {
   pricePerUnit  Decimal @db.Decimal(10, 2)
   itemDiscount  Decimal @default(0) @db.Decimal(10, 2)
   lineTotal     Decimal @db.Decimal(10, 2)
+
+  // NEW: Dual-unit selling — locked in at sale time
+  soldInSplitUnit    Boolean   @default(false)
+  splitUnitName      String?   // e.g. 'YARDS' — drives receipt display
+  splitUnitsPerWhole Decimal?  @db.Decimal(10, 4)  // e.g. 10.0000 — drives refund restock math
 
   createdAt DateTime @default(now())
 

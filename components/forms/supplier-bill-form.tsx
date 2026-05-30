@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { Fragment, useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -34,6 +34,11 @@ export type SupplierBillFormData = {
     sellingPricePerUnit: number;
     externalBarcode?: string;
     notes?: string;
+    // Dual-unit selling
+    canBeSplit?: boolean;
+    splitUnit?: string;
+    unitsPerWhole?: number;
+    splitSellingPrice?: number;
   }[];
   paymentStatus: "PAID" | "PARTIAL" | "UNPAID";
   amountPaid?: number;
@@ -106,6 +111,10 @@ export function SupplierBillForm({
       sellingPricePerUnit: 0,
       externalBarcode: "",
       notes: "",
+      canBeSplit: false,
+      splitUnit: "",
+      unitsPerWhole: undefined,
+      splitSellingPrice: undefined,
     },
   ]);
   const [paymentStatus, setPaymentStatus] = useState<"PAID" | "PARTIAL" | "UNPAID">("UNPAID");
@@ -186,6 +195,10 @@ export function SupplierBillForm({
         sellingPricePerUnit: 0,
         externalBarcode: "",
         notes: "",
+        canBeSplit: false,
+        splitUnit: "",
+        unitsPerWhole: undefined,
+        splitSellingPrice: undefined,
       },
     ]);
   };
@@ -201,6 +214,10 @@ export function SupplierBillForm({
       sellingPricePerUnit: 0,
       externalBarcode: "",
       notes: "",
+      canBeSplit: false,
+      splitUnit: "",
+      unitsPerWhole: undefined,
+      splitSellingPrice: undefined,
     }] : newItems);
   };
 
@@ -238,6 +255,18 @@ export function SupplierBillForm({
       if (item.sellingPricePerUnit <= item.buyingPricePerUnit) {
         newErrors[`sellPrice_${i}`] = "Selling price must be > buying price";
       }
+      // Dual-unit validation
+      if ((item as any).canBeSplit) {
+        if (!((item as any).splitUnit) || String((item as any).splitUnit).trim() === "") {
+          newErrors[`splitUnit_${i}`] = "Split unit is required when enabled";
+        }
+        if (!((item as any).unitsPerWhole) || Number((item as any).unitsPerWhole) <= 0) {
+          newErrors[`unitsPerWhole_${i}`] = "Units per whole must be > 0";
+        }
+        if (!((item as any).splitSellingPrice) || Number((item as any).splitSellingPrice) <= 0) {
+          newErrors[`splitSellingPrice_${i}`] = "Split selling price must be > 0";
+        }
+      }
     }
 
     if (paymentStatus === "PARTIAL") {
@@ -260,7 +289,21 @@ export function SupplierBillForm({
       await onSubmit({
         supplierId: selectedSupplierId,
         supplierInvoiceRef: supplierInvoiceRef || undefined,
-        items: lineItems.filter((item) => item.productId),
+        items: lineItems
+          .filter((item) => item.productId)
+          .map((li) => ({
+            productId: li.productId,
+            quantity: Number(li.quantity),
+            measuringUnit: li.measuringUnit,
+            buyingPricePerUnit: Number(li.buyingPricePerUnit),
+            sellingPricePerUnit: Number(li.sellingPricePerUnit),
+            externalBarcode: li.externalBarcode || undefined,
+            notes: li.notes || undefined,
+            canBeSplit: !!(li as any).canBeSplit,
+            splitUnit: (li as any).splitUnit || undefined,
+            unitsPerWhole: (li as any).unitsPerWhole ? Number((li as any).unitsPerWhole) : undefined,
+            splitSellingPrice: (li as any).splitSellingPrice ? Number((li as any).splitSellingPrice) : undefined,
+          })),
         paymentStatus,
         amountPaid: paymentStatus === "PARTIAL" ? amountPaid : undefined,
         creditToApply: creditToApply > 0 ? creditToApply : undefined,
@@ -348,7 +391,8 @@ export function SupplierBillForm({
               {lineItems.map((item, index) => {
                 const lineCost = item.quantity * item.buyingPricePerUnit;
                 return (
-                  <TableRow key={index}>
+                  <Fragment key={index}>
+                  <TableRow>
                     <TableCell className="w-[200px] p-2">
                       <Select
                         value={item.productId}
@@ -488,7 +532,85 @@ export function SupplierBillForm({
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </TableCell>
+                    </TableRow>
+                  <TableRow key={'split-' + index}>
+                    <TableCell colSpan={8} className="p-2 bg-surface/50 text-sm">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-2">
+                          <Switch
+                            checked={!!item.canBeSplit}
+                            onCheckedChange={(checked) =>
+                              handleLineItemChange(index, "canBeSplit", !!checked)
+                            }
+                          />
+                          <Label className="text-sm">Enable split selling</Label>
+                        </div>
+
+                        {item.canBeSplit && (
+                          <div className="flex items-center gap-3">
+                            <div>
+                              <Label className="text-xs">Split Unit</Label>
+                              <Select
+                                value={item.splitUnit || ""}
+                                onValueChange={(value) =>
+                                  handleLineItemChange(index, "splitUnit", value)
+                                }
+                              >
+                                <SelectTrigger className="w-40">
+                                  <SelectValue placeholder="Select..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {MEASURING_UNITS.map((unit) => (
+                                    <SelectItem key={unit} value={unit}>
+                                      {unit}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                              {errors[`splitUnit_${index}`] && (
+                                <p className="text-xs text-destructive mt-1">{errors[`splitUnit_${index}`]}</p>
+                              )}
+                            </div>
+
+                            <div>
+                              <Label className="text-xs">Units per {item.measuringUnit || "whole"}</Label>
+                              <Input
+                                type="number"
+                                step="1"
+                                min="1"
+                                className="w-32 text-sm"
+                                value={item.unitsPerWhole ?? ""}
+                                onChange={(e) =>
+                                  handleLineItemChange(index, "unitsPerWhole", e.target.valueAsNumber || undefined)
+                                }
+                              />
+                              {errors[`unitsPerWhole_${index}`] && (
+                                <p className="text-xs text-destructive mt-1">{errors[`unitsPerWhole_${index}`]}</p>
+                              )}
+                            </div>
+
+                            <div>
+                              <Label className="text-xs">Split Selling Price</Label>
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                className="w-36 text-sm"
+                                value={item.splitSellingPrice ?? ""}
+                                onChange={(e) =>
+                                  handleLineItemChange(index, "splitSellingPrice", e.target.valueAsNumber || undefined)
+                                }
+                              />
+                              {errors[`splitSellingPrice_${index}`] && (
+                                <p className="text-xs text-destructive mt-1">{errors[`splitSellingPrice_${index}`]}</p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
                   </TableRow>
+                  </Fragment>
                 );
               })}
             </TableBody>

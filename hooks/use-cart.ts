@@ -5,7 +5,10 @@ import { create } from "zustand";
 import { roundQuantity, getMinimumQuantity } from "@/lib/utils";
 
 export interface CartItem {
-  stockId: string;
+  cartKey: string;        // NEW: `${stockId}:whole` or `${stockId}:split`
+  stockId: string;        // unchanged — sent to server
+  isSplitMode: boolean;   // NEW
+  unitsPerWhole?: number; // NEW — needed for maxQuantity calc and server submission
   productId: string;
   productName: string;
   supplierName: string;
@@ -22,9 +25,9 @@ interface CartStore {
 
   // Actions
   addItem: (item: CartItem) => void;
-  updateQuantity: (stockId: string, qty: number) => void;
-  updateItemDiscount: (stockId: string, discount: number) => void;
-  removeItem: (stockId: string) => void;
+  updateQuantity: (cartKey: string, qty: number) => void;
+  updateItemDiscount: (cartKey: string, discount: number) => void;
+  removeItem: (cartKey: string) => void;
   setCartDiscount: (discount: number) => void;
   clearCart: () => void;
 
@@ -43,13 +46,13 @@ export const useCart = create<CartStore>((set, get) => ({
 
   addItem: (item) => {
     set((state) => {
-      // Check if stock already in cart
-      const existing = state.items.find((i) => i.stockId === item.stockId);
+      // Check if item already in cart (by cartKey)
+      const existing = state.items.find((i) => i.cartKey === item.cartKey);
       if (existing) {
         // Update quantity (capped at maxQuantity)
         return {
           items: state.items.map((i) =>
-            i.stockId === item.stockId
+            i.cartKey === item.cartKey
               ? {
                   ...i,
                   quantity: Math.min(
@@ -65,10 +68,10 @@ export const useCart = create<CartStore>((set, get) => ({
     });
   },
 
-  updateQuantity: (stockId, qty) => {
+  updateQuantity: (cartKey, qty) => {
     set((state) => ({
       items: state.items.map((i) => {
-        if (i.stockId === stockId) {
+        if (i.cartKey === cartKey) {
           const rounded = roundQuantity(qty, i.measuringUnit);
           const newQty = Math.min(Math.max(0.01, rounded), i.maxQuantity);
           return {
@@ -86,10 +89,10 @@ export const useCart = create<CartStore>((set, get) => ({
     }));
   },
 
-  updateItemDiscount: (stockId, discount) => {
+  updateItemDiscount: (cartKey, discount) => {
     set((state) => ({
       items: state.items.map((i) =>
-        i.stockId === stockId
+        i.cartKey === cartKey
           ? {
               ...i,
               itemDiscount: Math.min(
@@ -102,9 +105,9 @@ export const useCart = create<CartStore>((set, get) => ({
     }));
   },
 
-  removeItem: (stockId) => {
+  removeItem: (cartKey) => {
     set((state) => ({
-      items: state.items.filter((i) => i.stockId !== stockId),
+      items: state.items.filter((i) => i.cartKey !== cartKey),
     }));
   },
 

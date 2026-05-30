@@ -209,7 +209,16 @@ export default function StocksPage() {
                       {formatCurrency(group.buyingPricePerUnit)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {formatCurrency(group.sellingPricePerUnit)}
+                      <div className="flex items-center justify-end gap-2">
+                        <span>
+                          {formatCurrency(group.sellingPricePerUnit)}
+                        </span>
+                        {group.canBeSplit && (
+                          <Badge variant="secondary" className="text-xs">
+                            SPLIT
+                          </Badge>
+                        )}
+                      </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <span

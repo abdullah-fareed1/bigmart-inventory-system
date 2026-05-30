@@ -477,6 +477,26 @@ export default function StockDetailPage() {
             <Separator />
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">Buying Price/Unit</span><span>{formatCurrency(buyingPrice)}</span></div>
             <div className="flex justify-between text-sm"><span className="text-muted-foreground">Selling Price/Unit</span><span>{formatCurrency(stock.sellingPricePerUnit)}</span></div>
+            
+            {/* NEW: Split Selling Configuration */}
+            {stock.canBeSplit && stock.splitUnit && stock.unitsPerWhole && stock.splitSellingPrice ? (
+              <>
+                <Separator />
+                <div className="space-y-2">
+                  <div className="flex justify-between text-sm"><span className="text-muted-foreground font-medium">Split Selling</span><Badge variant="secondary">ENABLED</Badge></div>
+                  <div className="flex justify-between text-sm"><span className="text-muted-foreground">Split Unit</span><span>{stock.splitUnit}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-muted-foreground">Units per Whole</span><span>{Number(stock.unitsPerWhole).toFixed(4)}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-muted-foreground">Split Price</span><span>{formatCurrency(stock.splitSellingPrice)} / {stock.splitUnit}</span></div>
+                  <div className="flex justify-between text-sm"><span className="text-muted-foreground">Availability</span><span>{formatQuantity(remaining, stock.measuringUnit)}  ({formatQuantity(remaining * Number(stock.unitsPerWhole), stock.splitUnit)} available for split selling)</span></div>
+                </div>
+              </>
+            ) : (
+              <>
+                <Separator />
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Split Selling</span><span className="text-muted-foreground italic">Not configured</span></div>
+              </>
+            )}
+            
             {stock.notes && (<><Separator /><div className="text-sm"><span className="text-muted-foreground">Notes: </span><span>{stock.notes}</span></div></>)}
           </CardContent>
         </Card>
