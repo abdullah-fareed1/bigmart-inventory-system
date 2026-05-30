@@ -278,6 +278,178 @@ export async function getSalesChartData() {
   };
 }
 
+export async function getDailyReport(limit: number = 10) {
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const todayEnd = new Date(todayStart);
+  todayEnd.setDate(todayEnd.getDate() + 1);
+
+  const [transactions, stockSummary, items, stocksAdded] = await Promise.all([
+    prisma.transaction.findMany({
+      where: {
+        saleDateTime: { gte: todayStart, lt: todayEnd },
+      },
+      select: {
+        amountPaid: true,
+        totalAmount: true,
+      },
+    }),
+    prisma.stock.aggregate({
+      where: {
+        suppliedDate: { gte: todayStart, lt: todayEnd },
+      },
+      _count: {
+        _all: true,
+      },
+      _sum: {
+        quantityAdded: true,
+        totalCost: true,
+      },
+    }),
+    prisma.transactionItem.findMany({
+      where: {
+        transaction: {
+          saleDateTime: { gte: todayStart, lt: todayEnd },
+        },
+      },
+      select: {
+        productId: true,
+        productName: true,
+        measuringUnit: true,
+        quantity: true,
+        lineTotal: true,
+        stock: {
+          select: {
+            buyingPricePerUnit: true,
+          },
+        },
+      },
+    }),
+    prisma.stock.findMany({
+      where: {
+        suppliedDate: { gte: todayStart, lt: todayEnd },
+      },
+      orderBy: { suppliedDate: "asc" },
+      select: {
+        id: true,
+        grnNumber: true,
+        product: {
+          select: {
+            name: true,
+          },
+        },
+        supplier: {
+          select: {
+            name: true,
+          },
+        },
+        quantityAdded: true,
+        measuringUnit: true,
+        buyingPricePerUnit: true,
+        totalCost: true,
+        suppliedDate: true,
+      },
+    }),
+  ]);
+
+  const totalCashReceived = transactions.reduce(
+    (sum, txn) =>
+      sum +
+      Number(txn.amountPaid ?? txn.totalAmount ?? 0),
+    0
+  );
+
+  const totalSalesRevenue = transactions.reduce(
+    (sum, txn) => sum + Number(txn.totalAmount ?? 0),
+    0
+  );
+
+  const productMap = new Map<
+    string,
+    {
+      productName: string;
+      unit: string;
+      quantitySold: number;
+      revenue: number;
+      cost: number;
+    }
+  >();
+
+  for (const item of items) {
+    const quantity = Number(item.quantity ?? 0);
+    const revenue = Number(item.lineTotal ?? 0);
+    const costPerUnit = Number(item.stock?.buyingPricePerUnit ?? 0);
+    const cost = costPerUnit * quantity;
+    const existing = productMap.get(item.productId);
+
+    if (existing) {
+      existing.quantitySold += quantity;
+      existing.revenue += revenue;
+      existing.cost += cost;
+    } else {
+      productMap.set(item.productId, {
+        productName: item.productName,
+        unit: item.measuringUnit,
+        quantitySold: quantity,
+        revenue,
+        cost,
+      });
+    }
+  }
+
+  const productsSoldToday = Array.from(productMap.entries())
+    .map(([productId, product]) => {
+      const profit = product.revenue - product.cost;
+      return {
+        productId,
+        productName: product.productName,
+        unit: product.unit,
+        quantitySold: Number(Math.round(product.quantitySold * 100) / 100),
+        revenue: Number(Math.round(product.revenue * 100) / 100),
+        cost: Number(Math.round(product.cost * 100) / 100),
+        profit: Number(Math.round(profit * 100) / 100),
+        profitMargin:
+          product.revenue > 0
+            ? Number(
+                Math.round((profit / product.revenue) * 1000) / 10
+              )
+            : 0,
+      };
+    })
+    .sort((a, b) => b.quantitySold - a.quantitySold)
+    .slice(0, limit);
+
+  const totalProfit = productsSoldToday.reduce(
+    (sum, product) => sum + product.profit,
+    0
+  );
+
+  const stocksAddedToday = stocksAdded.map((stock) => ({
+    id: stock.id,
+    grnNumber: stock.grnNumber,
+    productName: stock.product.name,
+    supplierName: stock.supplier.name,
+    quantityAdded: Number(stock.quantityAdded),
+    unit: stock.measuringUnit,
+    buyingPricePerUnit: Number(stock.buyingPricePerUnit),
+    totalCost: Number(stock.totalCost),
+    suppliedDate: stock.suppliedDate.toISOString(),
+  }));
+
+  return {
+    totalCashReceived,
+    totalSalesRevenue,
+    totalProfit: Number(Math.round(totalProfit * 100) / 100),
+    totalStocksAddedQuantity: Number(
+      stockSummary._sum.quantityAdded ?? 0
+    ),
+    totalStockCostAdded: Number(stockSummary._sum.totalCost ?? 0),
+    stockEntriesAdded: stockSummary._count._all ?? 0,
+    productsSoldToday,
+    stocksAddedToday,
+  };
+}
+
 function groupByDay(
   txns: { saleDateTime: Date; totalAmount: Prisma.Decimal }[],
   startDate: Date,

@@ -20,19 +20,22 @@ import {
   getSalesChartData,
   getTopProducts,
   getLowStockItems,
+  getDailyReport,
 } from "@/actions/dashboard";
 import { formatCurrency } from "@/lib/format";
+import { DailyReport } from "@/components/dashboard/daily-report";
 
 export default async function DashboardPage() {
   const session = await auth();
   const userRole = (session?.user as any)?.role || "ADMIN";
   const isCashier = userRole === "CASHIER";
 
-  const [stats, chartData, topProducts, lowStockItems] = await Promise.all([
+  const [stats, chartData, topProducts, lowStockItems, dailyReport] = await Promise.all([
     getDashboardStats(),
     getSalesChartData(),
     getTopProducts(),
     getLowStockItems(),
+    getDailyReport(),
   ]);
 
   return (
@@ -198,6 +201,10 @@ export default async function DashboardPage() {
             <div className="lg:col-span-3">
               <TopProductsWrapper products={topProducts} />
             </div>
+          </div>
+
+          <div className="grid gap-4">
+            <DailyReport report={dailyReport} />
           </div>
 
           {/* Low Stock Alert */}
